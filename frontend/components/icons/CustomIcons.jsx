@@ -1,9 +1,9 @@
 import React from 'react';
 import { Cube } from 'lucide-react';
 
-// Use a default export instead of named export to avoid import issues
-const Image3D = (props) => {
-    return <Cube {...props} />;
-  };
-  
-  export default Image3D;
+// Create a proper component with default export
+const Image3D = ({ size, color, ...props }) => {
+  return <Cube size={size} color={color} {...props} />;
+};
+
+export default Image3D;
