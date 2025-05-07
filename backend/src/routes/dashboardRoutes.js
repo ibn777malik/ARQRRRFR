@@ -3,6 +3,9 @@ const router = express.Router();
 const mongoose = require("mongoose");
 const jwt = require("jsonwebtoken");
 const Element = require("../../models/Element");  // ✅ Correct path based on your project structure
+const { createQR } = require("../utils/qrGenerator");
+const path = require("path");
+const fs = require("fs");
 
 
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -147,5 +150,49 @@ router.delete("/uploads/:id", verifyToken, async (req, res) => {
     res.status(500).json({ error: "Failed to delete upload." });
   }
 });
-
+// Generate QR code for a menu
+router.get("/menu-qr/:id", verifyToken, async (req, res) => {
+  try {
+    const menuId = req.params.id;
+    
+    // Assuming Element can represent a menu for now
+    // Later you'll replace this with Menu model lookup
+    const menuElement = await Element.findById(menuId);
+    
+    if (!menuElement) return res.status(404).json({ error: "Menu not found" });
+    
+    // Create a URL for the menu view
+    const menuUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/menu/${menuId}`;
+    const qrFilename = `menu_${menuId}`;
+    
+    // Define QR code paths
+    const qrDir = path.join(__dirname, "../public/qrcodes");
+    const frontendQrDir = path.resolve(__dirname, "../../../frontend/public/qrcodes");
+    
+    // Make sure directories exist
+    if (!fs.existsSync(qrDir)) fs.mkdirSync(qrDir, { recursive: true });
+    if (!fs.existsSync(frontendQrDir)) fs.mkdirSync(frontendQrDir, { recursive: true });
+    
+    // Generate QR code
+    const qrFilePath = path.join(frontendQrDir, `${qrFilename}.png`);
+    await createQR(menuUrl, qrFilePath);
+    
+    // Also create a copy in the backend public directory if different
+    const backendQrPath = path.join(qrDir, `${qrFilename}.png`);
+    if (qrFilePath !== backendQrPath) {
+      fs.copyFileSync(qrFilePath, backendQrPath);
+    }
+    
+    // Get frontend URL for the QR code
+    const frontendUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/qrcodes/${qrFilename}.png`;
+    
+    res.json({
+      menuUrl,
+      qrCodeUrl: frontendUrl
+    });
+  } catch (error) {
+    console.error("Error generating menu QR code:", error);
+    res.status(500).json({ error: "Failed to generate QR code" });
+  }
+});
 module.exports = router;

@@ -5,7 +5,8 @@ const mongoose = require("mongoose");
 const authRoutes = require("./routes/authRoutes");
 const uploadRoutes = require("./routes/uploadRoutes");
 const dashboardRoutes = require("./routes/dashboardRoutes"); // ✅ Import dashboardRoutes
-
+const menuRoutes = require("./routes/menuRoutes");
+const analyticsRoutes = require("./routes/analyticsRoutes");
 const app = express();
 
 // Use DATABASE_URL from your .env file for the connection string
@@ -43,3 +44,6 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+// Register routes
+app.use("/api/menus", menuRoutes);
+app.use("/api/analytics", analyticsRoutes);
