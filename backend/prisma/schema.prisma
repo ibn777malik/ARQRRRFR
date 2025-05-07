@@ -1,0 +1,38 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id       String   @id @default(auto()) @map("_id") @db.ObjectId
+  email    String   @unique
+  password String
+  uploads  Upload[] @relation("UserUploads")
+}
+
+model Upload {
+  id                  String    @id @default(auto()) @map("_id") @db.ObjectId
+  fileUrl             String
+  qrCodeUrl           String
+  interactiveElements Json
+  arConfig            Json
+  clickActions        Json
+  createdAt           DateTime  @default(now())
+  userId              String?   @db.ObjectId
+  user                User?     @relation("UserUploads", fields: [userId], references: [id])
+  elements            Element[] @relation("UploadElements")
+}
+
+model Element {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  name      String   @default("NA")
+  fileUrl   String
+  type      String
+  createdAt DateTime @default(now())
+  uploadId  String?  @db.ObjectId
+  upload    Upload?  @relation("UploadElements", fields: [uploadId], references: [id])
+}

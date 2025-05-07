@@ -1,0 +1,13 @@
+# Ignore node modules
+/backend/node_modules/
+/frontend/node_modules/
+
+# Ignore environment files
+/backend/.env
+/backend/.env.*
+/frontend/.env
+/frontend/.env.*
+/frontend/.next
+/frontend/.next.*
+/backend/.next
+/backend/.next.*
