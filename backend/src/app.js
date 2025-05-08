@@ -4,9 +4,11 @@ const cors = require("cors");
 const mongoose = require("mongoose");
 const authRoutes = require("./routes/authRoutes");
 const uploadRoutes = require("./routes/uploadRoutes");
-const dashboardRoutes = require("./routes/dashboardRoutes"); // ✅ Import dashboardRoutes
+const dashboardRoutes = require("./routes/dashboardRoutes");
 const menuRoutes = require("./routes/menuRoutes");
 const analyticsRoutes = require("./routes/analyticsRoutes");
+const healthRoutes = require("./routes/healthRoutes");
+
 const app = express();
 
 // Use DATABASE_URL from your .env file for the connection string
@@ -27,7 +29,13 @@ app.use(cors());
 // ✅ Register Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/uploads", uploadRoutes);
-app.use("/api", dashboardRoutes); // ✅ Now /api/elements/:id will work
+app.use("/api", dashboardRoutes); // ✅ For /api/elements/:id
+app.use("/api/menus", menuRoutes); // ✅ Register menu routes
+app.use("/api/analytics", analyticsRoutes);
+app.use("/api/health", healthRoutes); // ✅ Health check endpoint
+
+// Serve static files
+app.use("/public", express.static("src/public"));
 
 // Handle unknown routes
 app.use((req, res) => {
@@ -44,6 +52,3 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
-// Register routes
-app.use("/api/menus", menuRoutes);
-app.use("/api/analytics", analyticsRoutes);

@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/router";
 import axios from "axios";
@@ -20,6 +19,7 @@ export default function EnhancedMenuEditor() {
     name: "Our Menu",
     restaurant: "My Restaurant",
     items: [],
+    categories: [],
     theme: {
       primaryColor: "#0070f3",
       secondaryColor: "#f5f5f5",
@@ -47,6 +47,12 @@ export default function EnhancedMenuEditor() {
         setLoading(true);
         try {
           const token = localStorage.getItem("token");
+          if (!token) {
+            setErrorMessage("You need to be logged in to edit menus");
+            router.push("/login");
+            return;
+          }
+          
           const response = await axios.get(`${BACKEND_URL}/api/menus/${id}`, {
             headers: { Authorization: `Bearer ${token}` }
           });
@@ -59,7 +65,7 @@ export default function EnhancedMenuEditor() {
           
         } catch (error) {
           console.error("Error fetching menu:", error);
-          setErrorMessage("Failed to load the menu. Please try again.");
+          setErrorMessage(error.response?.data?.error || "Failed to load the menu. Please try again.");
         } finally {
           setLoading(false);
         }
@@ -67,13 +73,15 @@ export default function EnhancedMenuEditor() {
       
       fetchMenu();
     }
-  }, [id]);
+  }, [id, router]);
   
   // Fetch available 3D models
   useEffect(() => {
     const fetchModels = async () => {
       try {
         const token = localStorage.getItem("token");
+        if (!token) return;
+        
         const response = await axios.get(`${BACKEND_URL}/api/elements`, {
           headers: { Authorization: `Bearer ${token}` }
         });
@@ -258,11 +266,19 @@ export default function EnhancedMenuEditor() {
     
     try {
       const token = localStorage.getItem("token");
+      if (!token) {
+        setErrorMessage("You need to be logged in to save menus");
+        router.push("/login");
+        return;
+      }
+      
       const endpoint = id 
         ? `${BACKEND_URL}/api/menus/${id}` 
         : `${BACKEND_URL}/api/menus`;
       
       const method = id ? "PUT" : "POST";
+      
+      console.log(`Saving menu to ${endpoint} with method ${method}`);
       
       const response = await axios({
         method,
@@ -274,6 +290,7 @@ export default function EnhancedMenuEditor() {
         }
       });
       
+      console.log("Menu saved successfully:", response.data);
       setSuccessMessage("Menu saved successfully!");
       setSavedMenuId(response.data._id);
       
@@ -286,7 +303,7 @@ export default function EnhancedMenuEditor() {
       
     } catch (error) {
       console.error("Error saving menu:", error);
-      setErrorMessage("Failed to save menu. Please try again.");
+      setErrorMessage(error.response?.data?.error || "Failed to save menu. Please try again.");
     } finally {
       setIsSaving(false);
     }
@@ -441,6 +458,58 @@ export default function EnhancedMenuEditor() {
             {/* Menu Items Tab */}
             {activeTab === "items" && (
               <div>
+                {/* Categories */}
+                <div className="mb-6">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Categories
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {menu.categories?.map((category, idx) => (
+                      <div key={idx} className="flex items-center bg-gray-100 rounded px-3 py-1">
+                        <span>{category}</span>
+                        <button
+                          onClick={() => {
+                            const updatedCategories = [...menu.categories];
+                            updatedCategories.splice(idx, 1);
+                            setMenu({ ...menu, categories: updatedCategories });
+                          }}
+                          className="ml-2 text-red-500"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        const input = e.target.elements.category;
+                        const value = input.value.trim();
+                        if (value && !menu.categories?.includes(value)) {
+                          setMenu({
+                            ...menu,
+                            categories: [...(menu.categories || []), value]
+                          });
+                          input.value = "";
+                        }
+                      }}
+                      className="flex"
+                    >
+                      <input
+                        name="category"
+                        type="text"
+                        placeholder="Add category"
+                        className="border rounded-l px-3 py-1"
+                      />
+                      <button
+                        type="submit"
+                        className="bg-blue-500 text-white px-3 py-1 rounded-r"
+                      >
+                        Add
+                      </button>
+                    </form>
+                  </div>
+                </div>
+              
                 {/* Add Items Section */}
                 <div className="mb-6">
                   <div className="flex justify-between items-center mb-4">
@@ -519,8 +588,7 @@ export default function EnhancedMenuEditor() {
                               placeholder="Item Name"
                             />
                           </div>
-                          
-                          {/* Button Type Item */}
+
                           {item.type === 'button' && (
                             <>
                               <div className="grid grid-cols-2 gap-4 mb-4">
