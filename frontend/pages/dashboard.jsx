@@ -14,6 +14,7 @@ import Header from '../components/dashboard/Header';
 import StatsCard from '../components/dashboard/StatsCard';
 import ActivityCard from '../components/dashboard/ActivityCard';
 import QuickActions from '../components/dashboard/QuickActions';
+import QRGenerator from '../components/QRGenerator';
 
 const BACKEND_URL = "http://localhost:5000";
 const FRONTEND_URL = "http://localhost:3000";
@@ -39,6 +40,8 @@ export default function Dashboard() {
   ]);
   const [activeTab, setActiveTab] = useState('models');
   const [viewingQRForId, setViewingQRForId] = useState(null);
+  const [showQRModal, setShowQRModal] = useState(false);
+  const [selectedMenu, setSelectedMenu] = useState(null);
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -102,7 +105,11 @@ export default function Dashboard() {
 
     fetchData();
   }, [router]);
-
+// Function to trigger QR code generation
+const handleGenerateQR = (menu) => {
+  setSelectedMenu(menu);
+  setShowQRModal(true);
+};
   const updateName = async (uploadId) => {
     if (!editingUpload || !editingUpload.name.trim()) return;
   
@@ -1292,6 +1299,16 @@ const closeQRViewer = () => {
     </motion.div>
   </motion.div>
 )}              
+// In your JSX render
+{showQRModal && (
+  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <QRGenerator 
+      menuId={selectedMenu._id}
+      menuName={selectedMenu.name}
+      onClose={() => setShowQRModal(false)}
+    />
+  </div>
+)}
                   {/* Password Section */}
                   <div style={{ borderBottom: '1px solid #e5e7eb', padding: '20px' }}>
                     <motion.div 
