@@ -1,9 +1,12 @@
+
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/router";
 import axios from "axios";
 import { motion } from "framer-motion";
-import { Upload, ImagePlus, Cube, Link as LinkIcon, Video, Save, ArrowLeft, Plus, Trash2 } from "lucide-react";
-import QRGenerator from '../components/QRGenerator';
+import { 
+  Upload, ImagePlus, Cube, Link as LinkIcon, Video, Save, 
+  ArrowLeft, Plus, Trash2, Type, Layout
+} from "lucide-react";
 
 const BACKEND_URL = "http://localhost:5000";
 
@@ -11,13 +14,11 @@ export default function EnhancedMenuEditor() {
   const router = useRouter();
   const { id } = router.query; // For editing existing menus
   const fileInputRef = useRef(null);
-  const [showQRGenerator, setShowQRGenerator] = useState(false);
-const [savedMenuId, setSavedMenuId] = useState(null);
+  
   // Menu state
   const [menu, setMenu] = useState({
     name: "Our Menu",
     restaurant: "My Restaurant",
-    categories: ["Appetizers", "Main Courses", "Desserts", "Drinks"],
     items: [],
     theme: {
       primaryColor: "#0070f3",
@@ -29,7 +30,6 @@ const [savedMenuId, setSavedMenuId] = useState(null);
   });
   
   // UI state
-  const [currentCategory, setCurrentCategory] = useState("Appetizers");
   const [models, setModels] = useState([]);
   const [activeTab, setActiveTab] = useState("items"); // tabs: items, design, preview
   const [loading, setLoading] = useState(false);
@@ -37,6 +37,8 @@ const [savedMenuId, setSavedMenuId] = useState(null);
   const [backgroundImage, setBackgroundImage] = useState(null);
   const [successMessage, setSuccessMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+  const [showQRGenerator, setShowQRGenerator] = useState(false);
+  const [savedMenuId, setSavedMenuId] = useState(null);
   
   // Fetch existing menu if editing
   useEffect(() => {
@@ -49,7 +51,6 @@ const [savedMenuId, setSavedMenuId] = useState(null);
             headers: { Authorization: `Bearer ${token}` }
           });
           setMenu(response.data);
-          setCurrentCategory(response.data.categories[0] || "Appetizers");
           
           // If menu has a background image, set it
           if (response.data.theme?.backgroundImage) {
@@ -86,16 +87,61 @@ const [savedMenuId, setSavedMenuId] = useState(null);
   }, []);
   
   // Add new menu item
-  const addMenuItem = () => {
-    const newItem = {
-      name: "New Item",
-      description: "Description here",
-      price: 9.99,
-      category: currentCategory,
-      modelId: null,
-      image: null,
-      buttons: [] // For interactive buttons (links, videos, etc.)
-    };
+  const addMenuItem = (type) => {
+    let newItem;
+    
+    switch (type) {
+      case 'button':
+        newItem = {
+          type: 'button',
+          name: "New Button",
+          buttonType: "model", // Default button type: 'model', 'url', 'image', 'video'
+          label: "View in AR",
+          value: null, // URL, modelId, etc.
+          style: {
+            backgroundColor: menu.theme.primaryColor,
+            textColor: "#FFFFFF",
+            borderRadius: "4px",
+          }
+        };
+        break;
+      case 'image':
+        newItem = {
+          type: 'image',
+          name: "Image Item",
+          src: null,
+          alt: "Menu image",
+          width: 300,
+          height: 200
+        };
+        break;
+      case 'video':
+        newItem = {
+          type: 'video',
+          name: "Video Item",
+          src: null,
+          width: 300,
+          height: 200,
+          autoplay: false,
+          controls: true
+        };
+        break;
+      case 'text':
+      default:
+        newItem = {
+          type: 'text',
+          name: "Text Area",
+          content: "Enter your text here...",
+          style: {
+            fontSize: "16px",
+            color: menu.theme.textColor,
+            fontWeight: "normal",
+            textAlign: "left",
+            backgroundColor: "transparent"
+          }
+        };
+        break;
+    }
     
     setMenu({
       ...menu,
@@ -103,42 +149,21 @@ const [savedMenuId, setSavedMenuId] = useState(null);
     });
   };
   
-  // Add interactive button to a menu item
-  const addButton = (itemIndex, type) => {
-    const updatedItems = [...menu.items];
-    const newButton = {
-      type, // 'link', 'video', 'model'
-      label: `${type.charAt(0).toUpperCase() + type.slice(1)} Button`,
-      value: type === 'link' ? 'https://' : null,
-      modelId: type === 'model' ? null : undefined
-    };
-    
-    if (!updatedItems[itemIndex].buttons) {
-      updatedItems[itemIndex].buttons = [];
-    }
-    
-    updatedItems[itemIndex].buttons.push(newButton);
-    setMenu({ ...menu, items: updatedItems });
-  };
-  
-  // Update button properties
-  const updateButton = (itemIndex, buttonIndex, field, value) => {
-    const updatedItems = [...menu.items];
-    updatedItems[itemIndex].buttons[buttonIndex][field] = value;
-    setMenu({ ...menu, items: updatedItems });
-  };
-  
-  // Remove interactive button
-  const removeButton = (itemIndex, buttonIndex) => {
-    const updatedItems = [...menu.items];
-    updatedItems[itemIndex].buttons.splice(buttonIndex, 1);
-    setMenu({ ...menu, items: updatedItems });
-  };
-  
   // Update menu item
   const updateMenuItem = (index, field, value) => {
     const updatedItems = [...menu.items];
-    updatedItems[index][field] = value;
+    
+    if (field.includes('.')) {
+      // Handle nested properties like 'style.color'
+      const [parentField, childField] = field.split('.');
+      updatedItems[index][parentField] = {
+        ...updatedItems[index][parentField],
+        [childField]: value
+      };
+    } else {
+      updatedItems[index][field] = value;
+    }
+    
     setMenu({ ...menu, items: updatedItems });
   };
   
@@ -158,6 +183,44 @@ const [savedMenuId, setSavedMenuId] = useState(null);
         [field]: value
       }
     });
+  };
+  
+  // Handle image upload for menu items
+  const handleItemImageUpload = async (itemIndex, type) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = type === 'video' ? "video/*" : "image/*";
+    
+    input.onchange = async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      
+      const formData = new FormData();
+      formData.append("file", file);
+      
+      try {
+        const token = localStorage.getItem("token");
+        const response = await axios.post(`${BACKEND_URL}/api/uploads`, formData, {
+          headers: {
+            "Content-Type": "multipart/form-data",
+            Authorization: `Bearer ${token}`
+          }
+        });
+        
+        const fileUrl = response.data.fileUrl;
+        if (type === 'video') {
+          updateMenuItem(itemIndex, "src", fileUrl);
+        } else {
+          updateMenuItem(itemIndex, "src", fileUrl);
+        }
+        
+      } catch (error) {
+        console.error("Error uploading file:", error);
+        setErrorMessage("Failed to upload file. Please try again.");
+      }
+    };
+    
+    input.click();
   };
   
   // Handle background image upload
@@ -187,32 +250,6 @@ const [savedMenuId, setSavedMenuId] = useState(null);
     }
   };
   
-  // Handle menu item image upload
-  const handleItemImageUpload = async (itemIndex, e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    
-    const formData = new FormData();
-    formData.append("file", file);
-    
-    try {
-      const token = localStorage.getItem("token");
-      const response = await axios.post(`${BACKEND_URL}/api/uploads`, formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-          Authorization: `Bearer ${token}`
-        }
-      });
-      
-      const imageUrl = response.data.fileUrl;
-      updateMenuItem(itemIndex, "image", imageUrl);
-      
-    } catch (error) {
-      console.error("Error uploading image:", error);
-      setErrorMessage("Failed to upload menu item image.");
-    }
-  };
-  
   // Save menu
   const saveMenu = async () => {
     setIsSaving(true);
@@ -238,6 +275,7 @@ const [savedMenuId, setSavedMenuId] = useState(null);
       });
       
       setSuccessMessage("Menu saved successfully!");
+      setSavedMenuId(response.data._id);
       
       // If this is a new menu, redirect to edit with the new ID
       if (!id && response.data._id) {
@@ -252,32 +290,17 @@ const [savedMenuId, setSavedMenuId] = useState(null);
     } finally {
       setIsSaving(false);
     }
-    if (saveSuccessful) {
-      setSavedMenuId(response.data._id);
-      setShowQRGenerator(true);
-    }
-  
   };
   
   // Generate QR code for the menu
   const generateQRCode = async () => {
-    if (!id) {
+    if (!id && !savedMenuId) {
       setErrorMessage("Please save the menu first to generate a QR code.");
       return;
     }
     
-    try {
-      const token = localStorage.getItem("token");
-      await axios.get(`${BACKEND_URL}/api/menu-qr/${id}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      
-      setSuccessMessage("QR code generated successfully!");
-      
-    } catch (error) {
-      console.error("Error generating QR code:", error);
-      setErrorMessage("Failed to generate QR code.");
-    }
+    const menuId = id || savedMenuId;
+    setShowQRGenerator(true);
   };
   
   if (loading) {
@@ -326,8 +349,7 @@ const [savedMenuId, setSavedMenuId] = useState(null);
             
             <button
               onClick={generateQRCode}
-              disabled={!id}
-              className="flex items-center px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 transition"
+              className="flex items-center px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition"
             >
               <span>Generate QR Code</span>
             </button>
@@ -419,194 +441,130 @@ const [savedMenuId, setSavedMenuId] = useState(null);
             {/* Menu Items Tab */}
             {activeTab === "items" && (
               <div>
-                {/* Categories */}
+                {/* Add Items Section */}
                 <div className="mb-6">
-                  <h3 className="text-lg font-medium mb-2">Categories</h3>
-                  <div className="flex flex-wrap gap-2 mb-4">
-                    {menu.categories.map((category) => (
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-lg font-medium">Menu Items</h3>
+                    
+                    <div className="flex space-x-2">
                       <button
-                        key={category}
-                        className={`px-4 py-2 rounded-full text-sm ${
-                          currentCategory === category
-                            ? "bg-blue-600 text-white"
-                            : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-                        }`}
-                        onClick={() => setCurrentCategory(category)}
+                        onClick={() => addMenuItem('button')}
+                        className="px-3 py-1 bg-blue-100 text-blue-600 rounded-md hover:bg-blue-200 flex items-center text-sm"
                       >
-                        {category}
+                        <Plus size={16} className="mr-1" /> Button
                       </button>
-                    ))}
-                    <button
-                      className="px-4 py-2 rounded-full bg-gray-100 text-gray-700 hover:bg-gray-200 text-sm flex items-center"
-                      onClick={() => {
-                        const newCategory = prompt("Enter new category name:");
-                        if (newCategory && newCategory.trim()) {
-                          setMenu({
-                            ...menu,
-                            categories: [...menu.categories, newCategory.trim()]
-                          });
-                          setCurrentCategory(newCategory.trim());
-                        }
-                      }}
-                    >
-                      <Plus size={16} className="mr-1" /> Add Category
-                    </button>
+                      <button
+                        onClick={() => addMenuItem('image')}
+                        className="px-3 py-1 bg-green-100 text-green-600 rounded-md hover:bg-green-200 flex items-center text-sm"
+                      >
+                        <ImagePlus size={16} className="mr-1" /> Image
+                      </button>
+                      <button
+                        onClick={() => addMenuItem('video')}
+                        className="px-3 py-1 bg-red-100 text-red-600 rounded-md hover:bg-red-200 flex items-center text-sm"
+                      >
+                        <Video size={16} className="mr-1" /> Video
+                      </button>
+                      <button
+                        onClick={() => addMenuItem('text')}
+                        className="px-3 py-1 bg-purple-100 text-purple-600 rounded-md hover:bg-purple-200 flex items-center text-sm"
+                      >
+                        <Type size={16} className="mr-1" /> Text
+                      </button>
+                    </div>
                   </div>
                 </div>
                 
-                {/* Items for Current Category */}
-                <div>
-                  <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-medium">
-                      Items in {currentCategory}
-                    </h3>
-                    <button
-                      onClick={addMenuItem}
-                      className="px-3 py-1 bg-blue-100 text-blue-600 rounded-md hover:bg-blue-200 flex items-center text-sm"
-                    >
-                      <Plus size={16} className="mr-1" /> Add Item
-                    </button>
-                  </div>
-                  
-                  {/* Item List */}
-                  <div className="space-y-6">
-                    {menu.items
-                      .filter((item) => item.category === currentCategory)
-                      .map((item, itemIndex) => {
-                        const originalIndex = menu.items.findIndex(
-                          (i) => i === item
-                        );
-                        
-                        return (
-                          <motion.div
-                            key={itemIndex}
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            className="border rounded-lg overflow-hidden bg-white"
+                {/* Item List */}
+                <div className="space-y-6">
+                  {menu.items.length === 0 ? (
+                    <div className="text-center py-10 bg-gray-50 rounded-lg border border-dashed">
+                      <p className="text-gray-500">
+                        No items yet. Add your first item using the buttons above.
+                      </p>
+                    </div>
+                  ) : (
+                    menu.items.map((item, index) => (
+                      <motion.div
+                        key={index}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="border rounded-lg overflow-hidden bg-white"
+                      >
+                        {/* Item Header */}
+                        <div className="bg-gray-50 p-4 flex justify-between items-center">
+                          <h4 className="font-medium">
+                            {item.name || "Untitled Item"} 
+                            <span className="ml-2 text-xs text-gray-500">({item.type})</span>
+                          </h4>
+                          <button
+                            onClick={() => deleteMenuItem(index)}
+                            className="text-red-500 hover:text-red-700"
                           >
-                            {/* Item Header */}
-                            <div className="bg-gray-50 p-4 flex justify-between items-center">
-                              <h4 className="font-medium">{item.name || "New Item"}</h4>
-                              <button
-                                onClick={() => deleteMenuItem(originalIndex)}
-                                className="text-red-500 hover:text-red-700"
-                              >
-                                <Trash2 size={18} />
-                              </button>
-                            </div>
-                            
-                            {/* Item Content */}
-                            <div className="p-4">
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
+                        
+                        {/* Item Content - Different based on type */}
+                        <div className="p-4">
+                          <div className="mb-4">
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Item Name/Label
+                            </label>
+                            <input
+                              type="text"
+                              value={item.name}
+                              onChange={(e) => updateMenuItem(index, "name", e.target.value)}
+                              className="w-full p-2 border rounded-md"
+                              placeholder="Item Name"
+                            />
+                          </div>
+                          
+                          {/* Button Type Item */}
+                          {item.type === 'button' && (
+                            <>
+                              <div className="grid grid-cols-2 gap-4 mb-4">
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Item Name
+                                    Button Type
+                                  </label>
+                                  <select
+                                    value={item.buttonType}
+                                    onChange={(e) => updateMenuItem(index, "buttonType", e.target.value)}
+                                    className="w-full p-2 border rounded-md"
+                                  >
+                                    <option value="model">AR Model</option>
+                                    <option value="url">URL Link</option>
+                                    <option value="image">Image</option>
+                                    <option value="video">Video</option>
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Button Label
                                   </label>
                                   <input
                                     type="text"
-                                    value={item.name}
-                                    onChange={(e) =>
-                                      updateMenuItem(originalIndex, "name", e.target.value)
-                                    }
+                                    value={item.label}
+                                    onChange={(e) => updateMenuItem(index, "label", e.target.value)}
                                     className="w-full p-2 border rounded-md"
-                                    placeholder="Item Name"
-                                  />
-                                </div>
-                                <div>
-                                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Price ($)
-                                  </label>
-                                  <input
-                                    type="number"
-                                    value={item.price}
-                                    onChange={(e) =>
-                                      updateMenuItem(
-                                        originalIndex,
-                                        "price",
-                                        parseFloat(e.target.value) || 0
-                                      )
-                                    }
-                                    className="w-full p-2 border rounded-md"
-                                    step="0.01"
-                                    min="0"
+                                    placeholder="Button Label"
                                   />
                                 </div>
                               </div>
                               
-                              <div className="mb-4">
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
-                                  Description
-                                </label>
-                                <textarea
-                                  value={item.description}
-                                  onChange={(e) =>
-                                    updateMenuItem(
-                                      originalIndex,
-                                      "description",
-                                      e.target.value
-                                    )
-                                  }
-                                  className="w-full p-2 border rounded-md h-20"
-                                  placeholder="Item description"
-                                ></textarea>
-                              </div>
-                              
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                                <div>
-                                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Item Image
-                                  </label>
-                                  <div className="flex items-center">
-                                    {item.image ? (
-                                      <div className="relative mr-2">
-                                        <img
-                                          src={item.image}
-                                          alt={item.name}
-                                          className="w-16 h-16 object-cover rounded-md"
-                                        />
-                                        <button
-                                          onClick={() =>
-                                            updateMenuItem(originalIndex, "image", null)
-                                          }
-                                          className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1"
-                                          style={{ width: '20px', height: '20px', fontSize: '12px' }}
-                                        >
-                                          ×
-                                        </button>
-                                      </div>
-                                    ) : null}
-                                    <button
-                                      onClick={() => {
-                                        const input = document.createElement("input");
-                                        input.type = "file";
-                                        input.accept = "image/*";
-                                        input.onchange = (e) =>
-                                          handleItemImageUpload(originalIndex, e);
-                                        input.click();
-                                      }}
-                                      className="px-3 py-2 bg-gray-100 text-gray-700 rounded flex items-center text-sm"
-                                    >
-                                      <ImagePlus size={16} className="mr-1" />
-                                      {item.image ? "Change Image" : "Add Image"}
-                                    </button>
-                                  </div>
-                                </div>
-                                <div>
+                              {/* Button Value based on type */}
+                              {item.buttonType === 'model' && (
+                                <div className="mb-4">
                                   <label className="block text-sm font-medium text-gray-700 mb-1">
                                     3D Model
                                   </label>
                                   <select
-                                    value={item.modelId || ""}
-                                    onChange={(e) =>
-                                      updateMenuItem(
-                                        originalIndex,
-                                        "modelId",
-                                        e.target.value || null
-                                      )
-                                    }
+                                    value={item.value || ""}
+                                    onChange={(e) => updateMenuItem(index, "value", e.target.value)}
                                     className="w-full p-2 border rounded-md"
                                   >
-                                    <option value="">No 3D Model</option>
+                                    <option value="">Select a model</option>
                                     {models.map((model) => (
                                       <option key={model._id} value={model._id}>
                                         {model.name || `Model ${model._id}`}
@@ -614,177 +572,423 @@ const [savedMenuId, setSavedMenuId] = useState(null);
                                     ))}
                                   </select>
                                 </div>
-                              </div>
-                              // Then in your JSX
-{showQRGenerator && (
-  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-    <QRGenerator 
-      menuId={savedMenuId}
-      menuName={menu.name}
-      onClose={() => setShowQRGenerator(false)}
-    />
-  </div>
-)}
-                              {/* Interactive Buttons */}
-                              <div className="mt-6">
-                                <h5 className="font-medium text-sm mb-2">
-                                  Interactive Buttons
-                                </h5>
-                                
-                                <div className="space-y-3 mb-3">
-                                  {item.buttons && item.buttons.map((button, buttonIndex) => (
-                                    <div
-                                      key={buttonIndex}
-                                      className="border rounded-md p-3 bg-gray-50"
+                              )}
+                              
+                              {item.buttonType === 'url' && (
+                                <div className="mb-4">
+                                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    URL
+                                  </label>
+                                  <input
+                                    type="url"
+                                    value={item.value || ""}
+                                    onChange={(e) => updateMenuItem(index, "value", e.target.value)}
+                                    className="w-full p-2 border rounded-md"
+                                    placeholder="https://"
+                                  />
+                                </div>
+                              )}
+                              
+                              {(item.buttonType === 'image' || item.buttonType === 'video') && (
+                                <div className="mb-4">
+                                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    {item.buttonType === 'image' ? 'Image URL' : 'Video URL'}
+                                  </label>
+                                  <div className="flex">
+                                    <input
+                                      type="url"
+                                      value={item.value || ""}
+                                      onChange={(e) => updateMenuItem(index, "value", e.target.value)}
+                                      className="flex-grow p-2 border rounded-l-md"
+                                      placeholder={item.buttonType === 'image' ? 'Image URL' : 'Video URL'}
+                                    />
+                                    <button
+                                      onClick={() => handleItemImageUpload(index, item.buttonType)}
+                                      className="p-2 bg-gray-200 border border-l-0 rounded-r-md"
                                     >
-                                      <div className="flex justify-between items-center mb-2">
-                                        <span className="font-medium text-sm">
-                                          {button.type.charAt(0).toUpperCase() +
-                                            button.type.slice(1)}{" "}
-                                          Button
-                                        </span>
-                                        <button
-                                          onClick={() =>
-                                            removeButton(originalIndex, buttonIndex)
-                                          }
-                                          className="text-red-500 hover:text-red-700"
-                                        >
-                                          <Trash2 size={16} />
-                                        </button>
-                                      </div>
-                                      
-                                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                        <div>
-                                          <label className="block text-xs font-medium text-gray-700 mb-1">
-                                            Label
-                                          </label>
-                                          <input
-                                            type="text"
-                                            value={button.label}
-                                            onChange={(e) =>
-                                              updateButton(
-                                                originalIndex,
-                                                buttonIndex,
-                                                "label",
-                                                e.target.value
-                                              )
-                                            }
-                                            className="w-full p-2 border rounded-md text-sm"
-                                          />
-                                        </div>
-                                        {button.type === "link" && (
-                                          <div>
-                                            <label className="block text-xs font-medium text-gray-700 mb-1">
-                                              URL
-                                            </label>
-                                            <input
-                                              type="url"
-                                              value={button.value}
-                                              onChange={(e) =>
-                                                updateButton(
-                                                  originalIndex,
-                                                  buttonIndex,
-                                                  "value",
-                                                  e.target.value
-                                                )
-                                              }
-                                              className="w-full p-2 border rounded-md text-sm"
-                                              placeholder="https://"
-                                            />
-                                          </div>
-                                        )}
-                                        {button.type === "video" && (
-                                          <div>
-                                            <label className="block text-xs font-medium text-gray-700 mb-1">
-                                              Video URL
-                                            </label>
-                                            <input
-                                              type="url"
-                                              value={button.value}
-                                              onChange={(e) =>
-                                                updateButton(
-                                                  originalIndex,
-                                                  buttonIndex,
-                                                  "value",
-                                                  e.target.value
-                                                )
-                                              }
-                                              className="w-full p-2 border rounded-md text-sm"
-                                              placeholder="YouTube or Video URL"
-                                            />
-                                          </div>
-                                        )}
-                                        {button.type === "model" && (
-                                          <div>
-                                            <label className="block text-xs font-medium text-gray-700 mb-1">
-                                              3D Model
-                                            </label>
-                                            <select
-                                              value={button.modelId || ""}
-                                              onChange={(e) =>
-                                                updateButton(
-                                                  originalIndex,
-                                                  buttonIndex,
-                                                  "modelId",
-                                                  e.target.value || null
-                                                )
-                                              }
-                                              className="w-full p-2 border rounded-md text-sm"
-                                            >
-                                              <option value="">Select a model</option>
-                                              {models.map((model) => (
-                                                <option
-                                                  key={model._id}
-                                                  value={model._id}
-                                                >
-                                                  {model.name || `Model ${model._id}`}
-                                                </option>
-                                              ))}
-                                            </select>
-                                          </div>
-                                        )}
-                                      </div>
-                                    </div>
-                                  ))}
+                                      Upload
+                                    </button>
+                                  </div>
                                 </div>
-                                
-                                <div className="flex flex-wrap gap-2">
-                                  <button
-                                    onClick={() => addButton(originalIndex, "link")}
-                                    className="px-3 py-2 bg-gray-100 text-gray-700 rounded flex items-center text-sm hover:bg-gray-200"
-                                  >
-                                    <LinkIcon size={14} className="mr-1" />
-                                    Add Link
-                                  </button>
-                                  <button
-                                    onClick={() => addButton(originalIndex, "video")}
-                                    className="px-3 py-2 bg-gray-100 text-gray-700 rounded flex items-center text-sm hover:bg-gray-200"
-                                  >
-                                    <Video size={14} className="mr-1" />
-                                    Add Video
-                                  </button>
-                                  <button
-                                    onClick={() => addButton(originalIndex, "model")}
-                                    className="px-3 py-2 bg-gray-100 text-gray-700 rounded flex items-center text-sm hover:bg-gray-200"
-                                  >
-                                    <Cube size={14} className="mr-1" />
-                                    Add Model
-                                  </button>
+                              )}
+                              
+                              {/* Button Styling */}
+                              <div className="mt-4">
+                                <h5 className="font-medium text-sm mb-2">Button Style</h5>
+                                <div className="grid grid-cols-3 gap-4">
+                                  <div>
+                                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                                      Background Color
+                                    </label>
+                                    <input
+                                      type="color"
+                                      value={item.style?.backgroundColor || menu.theme.primaryColor}
+                                      onChange={(e) => updateMenuItem(index, "style.backgroundColor", e.target.value)}
+                                      className="w-full p-0 h-8"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                                      Text Color
+                                    </label>
+                                    <input
+                                      type="color"
+                                      value={item.style?.textColor || "#FFFFFF"}
+                                      onChange={(e) => updateMenuItem(index, "style.textColor", e.target.value)}
+                                      className="w-full p-0 h-8"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                                      Border Radius
+                                    </label>
+                                    <select
+                                      value={item.style?.borderRadius || "4px"}
+                                      onChange={(e) => updateMenuItem(index, "style.borderRadius", e.target.value)}
+                                      className="w-full p-2 border rounded-md text-sm"
+                                    >
+                                      <option value="0">None</option>
+                                      <option value="4px">Small</option>
+                                      <option value="8px">Medium</option>
+                                      <option value="9999px">Rounded</option>
+                                    </select>
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                          </motion.div>
-                        );
-                      })}
-                  </div>
-                  
-                  {menu.items.filter((item) => item.category === currentCategory)
-                    .length === 0 && (
-                    <div className="text-center py-10 bg-gray-50 rounded-lg border border-dashed">
-                      <p className="text-gray-500">
-                        No items yet. Click "Add Item" to get started.
-                      </p>
-                    </div>
+                              
+                              {/* Button Preview */}
+                              <div className="mt-4 p-4 bg-gray-50 rounded-md text-center">
+                                <p className="text-sm text-gray-500 mb-2">Button Preview</p>
+                                <button
+                                  style={{
+                                    backgroundColor: item.style?.backgroundColor || menu.theme.primaryColor,
+                                    color: item.style?.textColor || "#FFFFFF",
+                                    borderRadius: item.style?.borderRadius || "4px",
+                                    padding: "8px 16px",
+                                    border: "none",
+                                  }}
+                                >
+                                  {item.label || "Button"}
+                                </button>
+                              </div>
+                            </>
+                          )}
+                          
+                          {/* Image Type Item */}
+                          {item.type === 'image' && (
+                            <>
+                              <div className="mb-4">
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                  Image
+                                </label>
+                                {item.src ? (
+                                  <div className="relative mb-2">
+                                    <img
+                                      src={item.src}
+                                      alt={item.alt || "Menu image"}
+                                      className="w-full max-h-48 object-contain border rounded-md"
+                                    />
+                                    <button
+                                      onClick={() => updateMenuItem(index, "src", null)}
+                                      className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1"
+                                      style={{ width: '24px', height: '24px' }}
+                                    >
+                                      ×
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div 
+                                    className="w-full h-48 border rounded-md flex items-center justify-center bg-gray-100 mb-2"
+                                  >
+                                    <p className="text-gray-400">No image selected</p>
+                                  </div>
+                                )}
+                                <button
+                                  onClick={() => handleItemImageUpload(index, 'image')}
+                                  className="px-3 py-2 bg-gray-100 text-gray-700 rounded flex items-center text-sm"
+                                >
+                                  <ImagePlus size={16} className="mr-1" />
+                                  {item.src ? "Change Image" : "Upload Image"}
+                                </button>
+                              </div>
+                              
+                              <div className="grid grid-cols-2 gap-4 mb-4">
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Alt Text
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={item.alt || ""}
+                                    onChange={(e) => updateMenuItem(index, "alt", e.target.value)}
+                                    className="w-full p-2 border rounded-md"
+                                    placeholder="Image description"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Click Behavior
+                                  </label>
+                                  <select
+                                    value={item.clickBehavior || "none"}
+                                    onChange={(e) => updateMenuItem(index, "clickBehavior", e.target.value)}
+                                    className="w-full p-2 border rounded-md"
+                                  >
+                                    <option value="none">No action</option>
+                                    <option value="enlarge">Enlarge</option>
+                                    <option value="link">Open link</option>
+                                  </select>
+                                </div>
+                              </div>
+                              
+                              {item.clickBehavior === 'link' && (
+                                <div className="mb-4">
+                                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Link URL
+                                  </label>
+                                  <input
+                                    type="url"
+                                    value={item.linkUrl || ""}
+                                    onChange={(e) => updateMenuItem(index, "linkUrl", e.target.value)}
+                                    className="w-full p-2 border rounded-md"
+                                    placeholder="https://"
+                                  />
+                                </div>
+                              )}
+                              
+                              <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Width (px)
+                                  </label>
+                                  <input
+                                    type="number"
+                                    value={item.width || 300}
+                                    onChange={(e) => updateMenuItem(index, "width", parseInt(e.target.value))}
+                                    className="w-full p-2 border rounded-md"
+                                    min="50"
+                                    max="1200"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Height (px)
+                                  </label>
+                                  <input
+                                    type="number"
+                                    value={item.height || 200}
+                                    onChange={(e) => updateMenuItem(index, "height", parseInt(e.target.value))}
+                                    className="w-full p-2 border rounded-md"
+                                    min="50"
+                                    max="1200"
+                                  />
+                                </div>
+                              </div>
+                            </>
+                          )}
+                          
+                          {/* Video Type Item */}
+                          {item.type === 'video' && (
+                            <>
+                              <div className="mb-4">
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                  Video
+                                </label>
+                                {item.src ? (
+                                  <div className="relative mb-2">
+                                    <video
+                                      src={item.src}
+                                      controls={true}
+                                      className="w-full max-h-48 object-contain border rounded-md"
+                                    />
+                                    <button
+                                      onClick={() => updateMenuItem(index, "src", null)}
+                                      className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1"
+                                      style={{ width: '24px', height: '24px' }}
+                                    >
+                                      ×
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div 
+                                    className="w-full h-48 border rounded-md flex items-center justify-center bg-gray-100 mb-2"
+                                  >
+                                    <p className="text-gray-400">No video selected</p>
+                                  </div>
+                                )}
+                                <button
+                                  onClick={() => handleItemImageUpload(index, 'video')}
+                                  className="px-3 py-2 bg-gray-100 text-gray-700 rounded flex items-center text-sm"
+                                >
+                                  <Video size={16} className="mr-1" />
+                                  {item.src ? "Change Video" : "Upload Video"}
+                                </button>
+                              </div>
+                              
+                              <div className="grid grid-cols-2 gap-4 mb-4">
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Width (px)
+                                  </label>
+                                  <input
+                                    type="number"
+                                    value={item.width || 300}
+                                    onChange={(e) => updateMenuItem(index, "width", parseInt(e.target.value))}
+                                    className="w-full p-2 border rounded-md"
+                                    min="50"
+                                    max="1200"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Height (px)
+                                  </label>
+                                  <input
+                                    type="number"
+                                    value={item.height || 200}
+                                    onChange={(e) => updateMenuItem(index, "height", parseInt(e.target.value))}
+                                    className="w-full p-2 border rounded-md"
+                                    min="50"
+                                    max="1200"
+                                  />
+                                </div>
+                              </div>
+                              
+                              <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                  <label className="flex items-center text-sm font-medium text-gray-700">
+                                    <input
+                                      type="checkbox"
+                                      checked={item.controls || true}
+                                      onChange={(e) => updateMenuItem(index, "controls", e.target.checked)}
+                                      className="mr-2"
+                                    />
+                                    Show Controls
+                                  </label>
+                                </div>
+                                <div>
+                                  <label className="flex items-center text-sm font-medium text-gray-700">
+                                    <input
+                                      type="checkbox"
+                                      checked={item.autoplay || false}
+                                      onChange={(e) => updateMenuItem(index, "autoplay", e.target.checked)}
+                                      className="mr-2"
+                                    />
+                                    Autoplay (muted)
+                                  </label>
+                                </div>
+                              </div>
+                            </>
+                          )}
+                          
+                          {/* Text Area Type Item */}
+                          {item.type === 'text' && (
+                            <>
+                              <div className="mb-4">
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                  Text Content
+                                </label>
+                                <textarea
+                                  value={item.content || ""}
+                                  onChange={(e) => updateMenuItem(index, "content", e.target.value)}
+                                  className="w-full p-2 border rounded-md h-24"
+                                  placeholder="Enter your text here..."
+                                ></textarea>
+                              </div>
+                              
+                              <div className="grid grid-cols-3 gap-4 mb-4">
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Font Size
+                                  </label>
+                                  <select
+                                    value={item.style?.fontSize || "16px"}
+                                    onChange={(e) => updateMenuItem(index, "style.fontSize", e.target.value)}
+                                    className="w-full p-2 border rounded-md"
+                                  >
+                                    <option value="12px">Small</option>
+                                    <option value="16px">Medium</option>
+                                    <option value="20px">Large</option>
+                                    <option value="24px">X-Large</option>
+                                    <option value="32px">XX-Large</option>
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Text Color
+                                  </label>
+                                  <input
+                                    type="color"
+                                    value={item.style?.color || menu.theme.textColor}
+                                    onChange={(e) => updateMenuItem(index, "style.color", e.target.value)}
+                                    className="w-full p-0 h-8"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Text Align
+                                  </label>
+                                  <select
+                                    value={item.style?.textAlign || "left"}
+                                    onChange={(e) => updateMenuItem(index, "style.textAlign", e.target.value)}
+                                    className="w-full p-2 border rounded-md"
+                                  >
+                                    <option value="left">Left</option>
+                                    <option value="center">Center</option>
+                                    <option value="right">Right</option>
+                                  </select>
+                                </div>
+                              </div>
+                              
+                              <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Font Weight
+                                  </label>
+                                  <select
+                                    value={item.style?.fontWeight || "normal"}
+                                    onChange={(e) => updateMenuItem(index, "style.fontWeight", e.target.value)}
+                                    className="w-full p-2 border rounded-md"
+                                  >
+                                    <option value="normal">Normal</option>
+                                    <option value="bold">Bold</option>
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Background Color
+                                  </label>
+                                  <input
+                                    type="color"
+                                    value={item.style?.backgroundColor || "transparent"}
+                                    onChange={(e) => updateMenuItem(index, "style.backgroundColor", e.target.value)}
+                                    className="w-full p-0 h-8"
+                                  />
+                                </div>
+                              </div>
+                              
+                              {/* Text Preview */}
+                              <div className="mt-4 p-4 bg-gray-50 rounded-md">
+                                <p className="text-sm text-gray-500 mb-2">Text Preview</p>
+                                <div
+                                  style={{
+                                    fontSize: item.style?.fontSize || "16px",
+                                    color: item.style?.color || menu.theme.textColor,
+                                    fontWeight: item.style?.fontWeight || "normal",
+                                    textAlign: item.style?.textAlign || "left",
+                                    backgroundColor: item.style?.backgroundColor || "transparent",
+                                    padding: "10px",
+                                    borderRadius: "4px"
+                                  }}
+                                >
+                                  {item.content || "Text content appears here..."}
+                                </div>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </motion.div>
+                    ))
                   )}
                 </div>
               </div>
@@ -1054,7 +1258,8 @@ const [savedMenuId, setSavedMenuId] = useState(null);
                     fontFamily: menu.theme.fontFamily,
                     backgroundImage: backgroundImage ? `url(${backgroundImage})` : 'none',
                     backgroundSize: 'cover',
-                    backgroundPosition: 'center'
+                    backgroundPosition: 'center',
+                    minHeight: '500px'
                   }}
                 >
                   {/* Header */}
@@ -1084,147 +1289,101 @@ const [savedMenuId, setSavedMenuId] = useState(null);
                     </h2>
                   </div>
                   
-                  {/* Category Navigation */}
-                  <div 
-                    style={{
-                      display: 'flex',
-                      overflowX: 'auto',
-                      padding: '0.5rem',
-                      backgroundColor: menu.theme.primaryColor,
-                      color: '#fff'
-                    }}
-                  >
-                    {menu.categories.map((category) => (
-                      <button
-                        key={category}
-                        className="px-4 py-2 whitespace-nowrap text-white opacity-80 hover:opacity-100"
-                      >
-                        {category}
-                      </button>
-                    ))}
-                  </div>
-                  
-                  {/* Menu Items */}
+                  {/* Menu Items Preview */}
                   <div 
                     className="p-6"
                     style={{
                       backgroundColor: backgroundImage ? 'rgba(0,0,0,0.7)' : 'transparent'
                     }}
                   >
-                    {menu.categories.map((category) => (
-                      <div key={category} className="mb-8">
-                        <h3 
-                          style={{ 
-                            fontSize: '1.25rem',
-                            fontWeight: 'bold',
-                            color: menu.theme.primaryColor,
-                            borderBottom: `2px solid ${menu.theme.primaryColor}`,
-                            paddingBottom: '0.5rem',
-                            marginBottom: '1rem'
-                          }}
-                        >
-                          {category}
-                        </h3>
-                        
-                        <div className="space-y-4">
-                          {menu.items
-                            .filter((item) => item.category === category)
-                            .map((item, idx) => (
+                    {menu.items.length === 0 ? (
+                      <div className="text-center py-10 bg-white bg-opacity-80 rounded">
+                        <p className="text-gray-500">No items added to the menu yet</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {menu.items.map((item, idx) => {
+                          // Render different item types
+                          if (item.type === 'text') {
+                            return (
                               <div 
                                 key={idx}
-                                className="rounded-lg overflow-hidden"
                                 style={{
-                                  backgroundColor: 'rgba(255,255,255,0.9)',
-                                  display: 'flex',
-                                  color: '#333'
+                                  fontSize: item.style?.fontSize || "16px",
+                                  color: item.style?.color || menu.theme.textColor,
+                                  fontWeight: item.style?.fontWeight || "normal",
+                                  textAlign: item.style?.textAlign || "left",
+                                  backgroundColor: item.style?.backgroundColor === 'transparent' 
+                                    ? 'transparent' 
+                                    : item.style?.backgroundColor || 'transparent',
+                                  padding: "10px",
+                                  borderRadius: "4px"
                                 }}
                               >
-                                {item.image && (
-                                  <div 
-                                    style={{
-                                      width: '120px',
-                                      backgroundImage: `url(${item.image})`,
-                                      backgroundSize: 'cover',
-                                      backgroundPosition: 'center'
-                                    }}
-                                  ></div>
-                                )}
-                                
-                                <div className="p-4 flex-1">
-                                  <div className="flex justify-between items-start">
-                                    <h4 style={{ fontWeight: 'bold' }}>{item.name}</h4>
-                                    <span 
-                                      style={{ 
-                                        fontWeight: 'bold',
-                                        color: menu.theme.primaryColor
-                                      }}
-                                    >
-                                      ${item.price?.toFixed(2)}
-                                    </span>
-                                  </div>
-                                  
-                                  <p className="mt-1 text-sm">{item.description}</p>
-                                  
-                                  {(item.modelId || (item.buttons && item.buttons.length > 0)) && (
-                                    <div className="mt-3 flex gap-2">
-                                      {item.modelId && (
-                                        <button 
-                                          style={{
-                                            backgroundColor: menu.theme.primaryColor,
-                                            color: '#fff',
-                                            padding: '0.35rem 0.75rem',
-                                            borderRadius: '0.25rem',
-                                            fontSize: '0.875rem',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            border: 'none'
-                                          }}
-                                        >
-                                          <Cube size={14} style={{ marginRight: '0.25rem' }} />
-                                          View in AR
-                                        </button>
-                                      )}
-                                      
-                                      {item.buttons && item.buttons.map((button, btnIdx) => (
-                                        <button 
-                                          key={btnIdx}
-                                          style={{
-                                            backgroundColor: '#f0f0f0',
-                                            color: '#333',
-                                            padding: '0.35rem 0.75rem',
-                                            borderRadius: '0.25rem',
-                                            fontSize: '0.875rem',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            border: 'none'
-                                          }}
-                                        >
-                                          {button.type === 'link' && (
-                                            <LinkIcon size={14} style={{ marginRight: '0.25rem' }} />
-                                          )}
-                                          {button.type === 'video' && (
-                                            <Video size={14} style={{ marginRight: '0.25rem' }} />
-                                          )}
-                                          {button.type === 'model' && (
-                                            <Cube size={14} style={{ marginRight: '0.25rem' }} />
-                                          )}
-                                          {button.label}
-                                        </button>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
+                                {item.content || "Text content"}
                               </div>
-                            ))}
+                            );
+                          }
                           
-                          {menu.items.filter((item) => item.category === category).length === 0 && (
-                            <div className="text-center py-4 bg-white bg-opacity-80 rounded">
-                              <p className="text-gray-500">No items yet in this category</p>
-                            </div>
-                          )}
-                        </div>
+                          if (item.type === 'button') {
+                            return (
+                              <div key={idx} className="text-center my-3">
+                                <button
+                                  style={{
+                                    backgroundColor: item.style?.backgroundColor || menu.theme.primaryColor,
+                                    color: item.style?.textColor || "#FFFFFF",
+                                    borderRadius: item.style?.borderRadius || "4px",
+                                    padding: "8px 16px",
+                                    border: "none",
+                                  }}
+                                >
+                                  {item.label || "Button"}
+                                </button>
+                              </div>
+                            );
+                          }
+                          
+                          if (item.type === 'image' && item.src) {
+                            return (
+                              <div key={idx} className="my-3 text-center">
+                                <img 
+                                  src={item.src} 
+                                  alt={item.alt || item.name} 
+                                  style={{
+                                    width: `${item.width || 300}px`,
+                                    height: `${item.height || 200}px`,
+                                    maxWidth: '100%',
+                                    objectFit: 'contain',
+                                    margin: '0 auto'
+                                  }}
+                                />
+                              </div>
+                            );
+                          }
+                          
+                          if (item.type === 'video' && item.src) {
+                            return (
+                              <div key={idx} className="my-3 text-center">
+                                <video 
+                                  src={item.src}
+                                  controls={item.controls !== false}
+                                  autoPlay={item.autoplay || false}
+                                  muted={item.autoplay || false}
+                                  style={{
+                                    width: `${item.width || 300}px`,
+                                    height: `${item.height || 200}px`,
+                                    maxWidth: '100%',
+                                    margin: '0 auto'
+                                  }}
+                                />
+                              </div>
+                            );
+                          }
+                          
+                          return null;
+                        })}
                       </div>
-                    ))}
+                    )}
                   </div>
                 </div>
               </div>
@@ -1232,6 +1391,82 @@ const [savedMenuId, setSavedMenuId] = useState(null);
           </div>
         </div>
       </div>
+      
+      {/* QR Code Generator Modal */}
+      {showQRGenerator && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          role="dialog"
+          aria-labelledby="qr-modal-title"
+        >
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-auto overflow-hidden">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-blue-600 to-indigo-700 p-6 text-white">
+              <h2 id="qr-modal-title" className="text-2xl font-bold">AR Menu QR Code</h2>
+              <p className="opacity-90">For "{menu.name}"</p>
+            </div>
+            
+            {/* Content */}
+            <div className="p-6">
+              <div className="flex flex-col items-center">
+                <div className="bg-gray-100 p-4 rounded-lg mb-6 text-center">
+                  {/* QR Code Display Placeholder */}
+                  <div className="relative mb-3 inline-block">
+                    <div className="w-64 h-64 bg-white border flex items-center justify-center">
+                      <span className="text-gray-400">QR Code Preview</span>
+                    </div>
+                    
+                    {/* Floating Indicator for AR Capability */}
+                    <div className="absolute -top-2 -right-2 bg-blue-600 text-white text-xs font-bold px-2 py-1 rounded-full">
+                      AR
+                    </div>
+                  </div>
+                  
+                  {/* URL Display */}
+                  <div className="text-sm text-gray-500 mt-2 mb-4">
+                    <p className="truncate max-w-xs mx-auto">
+                      {savedMenuId || id
+                        ? `https://yourmenu.com/${savedMenuId || id}`
+                        : "Please save the menu to generate a QR code"}
+                    </p>
+                  </div>
+                  
+                  {/* Action Buttons */}
+                  <div className="flex justify-center space-x-3">
+                    <button className="flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors">
+                      Download
+                    </button>
+                    <button className="flex items-center justify-center px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors">
+                      Copy URL
+                    </button>
+                    <button className="flex items-center justify-center px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors">
+                      Share
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            {/* Footer */}
+            <div className="bg-gray-50 px-6 py-4 flex justify-end">
+              <button
+                onClick={() => setShowQRGenerator(false)}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Styles for some animations */}
+      <style jsx global>{`
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+      `}</style>
     </div>
   );
 }
