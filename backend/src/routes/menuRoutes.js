@@ -4,6 +4,9 @@ const Menu = require('../../models/Menu');
 const Element = require("../../models/Element");
 const { protect } = require("../middleware/authMiddleware");
 const jwt = require("jsonwebtoken");
+const { createQR } = require("../utils/qrGenerator");
+const path = require("path");
+const fs = require("fs");
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
@@ -48,6 +51,45 @@ router.post("/", verifyToken, async (req, res) => {
   }
 });
 
+// Generate QR code for menu
+router.get("/qr/:id", verifyToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const menu = await Menu.findById(id);
+    
+    if (!menu) {
+      return res.status(404).json({ error: "Menu not found" });
+    }
+    
+    // Define QR code paths and URLs
+    const qrDir = path.join(__dirname, "../public/qrcodes");
+    const frontendQrDir = path.resolve(__dirname, "../../../frontend/public/qrcodes");
+    
+    // Make sure directories exist
+    if (!fs.existsSync(qrDir)) fs.mkdirSync(qrDir, { recursive: true });
+    if (!fs.existsSync(frontendQrDir)) fs.mkdirSync(frontendQrDir, { recursive: true });
+    
+    // Create QR filename
+    const qrFilename = `menu_${id}`;
+    
+    // Define the menu URL - use actual domain from environment or default to localhost
+    const menuUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/menu/${id}`;
+    
+    // Generate QR code
+    const qrFilePath = path.join(frontendQrDir, `${qrFilename}.png`);
+    await createQR(menuUrl, qrFilePath);
+    
+    // Return URLs
+    res.json({
+      menuUrl,
+      qrCodeUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/qrcodes/${qrFilename}.png`
+    });
+    
+  } catch (error) {
+    console.error("Error generating QR code:", error);
+    res.status(500).json({ error: "Failed to generate QR code" });
+  }
+});
 // Update an existing menu
 router.put("/:id", verifyToken, async (req, res) => {
   try {
@@ -105,12 +147,26 @@ router.get("/:id", verifyToken, async (req, res) => {
 // Get menu by ID (public endpoint)
 router.get("/public/:id", async (req, res) => {
   try {
-    const menu = await Menu.findById(req.params.id);
-    if (!menu) return res.status(404).json({ error: "Menu not found" });
+    const { id } = req.params;
+    console.log(`Fetching public menu with ID: ${id}`);
     
+    // Ensure the ID is in a valid format for MongoDB
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      console.error(`Invalid menu ID format: ${id}`);
+      return res.status(400).json({ error: "Invalid menu ID format" });
+    }
+    
+    const menu = await Menu.findById(id);
+    
+    if (!menu) {
+      console.error(`Menu not found with ID: ${id}`);
+      return res.status(404).json({ error: "Menu not found" });
+    }
+    
+    console.log(`Successfully found menu: ${menu.name}`);
     res.json(menu);
   } catch (error) {
-    console.error("Error fetching menu:", error);
+    console.error(`Error fetching menu ${req.params.id}:`, error);
     res.status(500).json({ error: "Failed to fetch menu" });
   }
 });

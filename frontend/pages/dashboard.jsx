@@ -54,33 +54,55 @@ export default function Dashboard() {
       setIsLoading(true);
       try {
         // Fetch models/uploads
-        const uploadsResponse = await fetch("/api/uploads");
-        const uploadsData = await uploadsResponse.json();
-        
-        if (Array.isArray(uploadsData) && uploadsData.length > 0) {
-          setUploads(uploadsData);
-          setStats(prev => ({...prev, totalModels: uploadsData.length}));
+        const token = localStorage.getItem("token");
+        if (!token) {
+          router.push("/login");
+          return;
+        }
+    
+        // Fetch models/uploads
+        try {
+          const uploadsResponse = await fetch("/api/uploads");
+          const uploadsData = await uploadsResponse.json();
+          
+          if (Array.isArray(uploadsData) && uploadsData.length > 0) {
+            setUploads(uploadsData);
+            setStats(prev => ({...prev, totalModels: uploadsData.length}));
+          }
+        } catch (error) {
+          console.error("Error fetching uploads:", error);
         }
         
-        // Try to fetch menus if endpoint exists
+        // Try to fetch menus with explicit authorization header
         try {
-          const menusResponse = await fetch("/api/menus", {
-            headers: { Authorization: `Bearer ${token}` }
+          const menusResponse = await fetch(`${BACKEND_URL}/api/menus`, {
+            headers: { 
+              "Authorization": `Bearer ${token}`,
+              "Content-Type": "application/json"
+            }
           });
           
           if (menusResponse.ok) {
             const menusData = await menusResponse.json();
-            setMenus(menusData);
-            setStats(prev => ({...prev, totalMenus: menusData.length}));
+            setMenus(Array.isArray(menusData) ? menusData : []);
+            setStats(prev => ({...prev, totalMenus: menusData.length || 0}));
+          } else {
+            console.warn("Menu API returned status:", menusResponse.status);
+            // Set empty array as fallback
+            setMenus([]);
           }
         } catch (menuError) {
-          console.log("Menu endpoints may not be available yet:", menuError);
+          console.error("Menu endpoints error:", menuError);
+          setMenus([]);
         }
         
         // Try to fetch analytics if endpoint exists
         try {
-          const analyticsResponse = await fetch("/api/analytics/summary", {
-            headers: { Authorization: `Bearer ${token}` }
+          const analyticsResponse = await fetch(`${BACKEND_URL}/api/analytics/summary`, {
+            headers: { 
+              "Authorization": `Bearer ${token}`,
+              "Content-Type": "application/json"
+            }
           });
           
           if (analyticsResponse.ok) {

@@ -14,6 +14,7 @@ export default function MenuView() {
   const [modelURL, setModelURL] = useState(null);
   const [model, setModel] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     if (!id) return;
@@ -21,13 +22,28 @@ export default function MenuView() {
     // Fetch menu data
     const fetchMenu = async () => {
       try {
+        setLoading(true);
         const response = await fetch(`/api/public/menu/${id}`);
+        
+        if (!response.ok) {
+          console.error("Error fetching menu:", response.status, response.statusText);
+          throw new Error(`Menu fetch failed: ${response.status}`);
+        }
+        
+        // Check that the response is actually JSON
+        const contentType = response.headers.get("content-type");
+        if (!contentType || !contentType.includes("application/json")) {
+          console.error("Error: Expected JSON response but got:", contentType);
+          throw new Error("Invalid response format");
+        }
+        
         const data = await response.json();
         setMenu(data);
-        setSelectedCategory(data.categories[0]);
-        setLoading(false);
+        setSelectedCategory(data.categories && data.categories.length > 0 ? data.categories[0] : null);
       } catch (error) {
-        console.error("Error fetching menu:", error);
+        console.error("Error processing menu data:", error);
+        setError(error.message || "Failed to load menu");
+      } finally {
         setLoading(false);
       }
     };
@@ -62,8 +78,20 @@ export default function MenuView() {
     }
   };
 
-  if (loading) return <div>Loading menu...</div>;
-  if (!menu) return <div>Menu not found</div>;
+ if (loading) return <div className="p-8 text-center">Loading menu...</div>;
+if (error) return (
+  <div className="p-8 text-center">
+    <h2 className="text-xl text-red-600 mb-4">Error Loading Menu</h2>
+    <p className="mb-4">{error}</p>
+    <button 
+      onClick={() => router.push("/dashboard")}
+      className="px-4 py-2 bg-blue-600 text-white rounded-md"
+    >
+      Return to Dashboard
+    </button>
+  </div>
+);
+if (!menu) return <div className="p-8 text-center">Menu not found</div>;
 
   return (
     <div className="menu-container">

@@ -309,24 +309,43 @@ export default function EnhancedMenuEditor() {
     }
   };
   
-  // Generate QR code for the menu
-  const generateQRCode = async () => {
-    if (!id && !savedMenuId) {
-      setErrorMessage("Please save the menu first to generate a QR code.");
-      return;
+ // In your QR generator function
+ const generateQRCode = async () => {
+  if (!id && !savedMenuId) {
+    setErrorMessage("Please save the menu first to generate a QR code.");
+    return;
+  }
+  
+  const menuId = id || savedMenuId;
+  setLoading(true);
+  
+  try {
+    const token = localStorage.getItem("token");
+    
+    // Call the QR generation endpoint
+    const response = await axios.get(`${BACKEND_URL}/api/menus/qr/${menuId}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    
+    if (response.data && response.data.qrCodeUrl) {
+      // Update menu with QR code URL
+      setMenu({
+        ...menu,
+        qrCodeUrl: response.data.qrCodeUrl,
+        menuUrl: response.data.menuUrl
+      });
+      setBackgroundImage(menu.theme.backgroundImage || null);
+      setSuccessMessage("QR code generated successfully!");
     }
     
-    const menuId = id || savedMenuId;
     setShowQRGenerator(true);
-  };
-  
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full"></div>
-      </div>
-    );
+  } catch (error) {
+    console.error("Error generating QR code:", error);
+    setErrorMessage("Failed to generate QR code. Please try again.");
+  } finally {
+    setLoading(false);
   }
+};
   
   return (
     <div className="min-h-screen bg-gray-50">
@@ -1460,74 +1479,124 @@ export default function EnhancedMenuEditor() {
         </div>
       </div>
       
-      {/* QR Code Generator Modal */}
-      {showQRGenerator && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-          role="dialog"
-          aria-labelledby="qr-modal-title"
-        >
-          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-auto overflow-hidden">
-            {/* Header */}
-            <div className="bg-gradient-to-r from-blue-600 to-indigo-700 p-6 text-white">
-              <h2 id="qr-modal-title" className="text-2xl font-bold">AR Menu QR Code</h2>
-              <p className="opacity-90">For "{menu.name}"</p>
-            </div>
-            
-            {/* Content */}
-            <div className="p-6">
-              <div className="flex flex-col items-center">
-                <div className="bg-gray-100 p-4 rounded-lg mb-6 text-center">
-                  {/* QR Code Display Placeholder */}
-                  <div className="relative mb-3 inline-block">
-                    <div className="w-64 h-64 bg-white border flex items-center justify-center">
-                      <span className="text-gray-400">QR Code Preview</span>
-                    </div>
-                    
-                    {/* Floating Indicator for AR Capability */}
-                    <div className="absolute -top-2 -right-2 bg-blue-600 text-white text-xs font-bold px-2 py-1 rounded-full">
-                      AR
-                    </div>
-                  </div>
-                  
-                  {/* URL Display */}
-                  <div className="text-sm text-gray-500 mt-2 mb-4">
-                    <p className="truncate max-w-xs mx-auto">
-                      {savedMenuId || id
-                        ? `https://yourmenu.com/${savedMenuId || id}`
-                        : "Please save the menu to generate a QR code"}
-                    </p>
-                  </div>
-                  
-                  {/* Action Buttons */}
-                  <div className="flex justify-center space-x-3">
-                    <button className="flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors">
-                      Download
-                    </button>
-                    <button className="flex items-center justify-center px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors">
-                      Copy URL
-                    </button>
-                    <button className="flex items-center justify-center px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors">
-                      Share
-                    </button>
-                  </div>
+{/* QR Code Generator Modal */}
+{showQRGenerator && (
+  <div
+    className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+    role="dialog"
+    aria-labelledby="qr-modal-title"
+  >
+    <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-auto overflow-hidden">
+      {/* Header */}
+      <div className="bg-gradient-to-r from-blue-600 to-indigo-700 p-6 text-white">
+        <h2 id="qr-modal-title" className="text-2xl font-bold">AR Menu QR Code</h2>
+        <p className="opacity-90">For "{menu.name}"</p>
+      </div>
+      
+      {/* Content */}
+      <div className="p-6">
+        <div className="flex flex-col items-center">
+          <div className="bg-gray-100 p-4 rounded-lg mb-6 text-center">
+            {/* QR Code Display */}
+            <div className="relative mb-3 inline-block">
+              {menu.qrCodeUrl ? (
+                <img 
+                  src={menu.qrCodeUrl} 
+                  alt="Menu QR Code" 
+                  className="w-64 h-64 object-contain border" 
+                />
+              ) : (
+                <div className="w-64 h-64 bg-white border flex items-center justify-center">
+                  <span className="text-gray-400">Loading QR Code...</span>
                 </div>
+              )}
+              
+              {/* Floating Indicator for AR Capability */}
+              <div className="absolute -top-2 -right-2 bg-blue-600 text-white text-xs font-bold px-2 py-1 rounded-full">
+                AR
               </div>
             </div>
             
-            {/* Footer */}
-            <div className="bg-gray-50 px-6 py-4 flex justify-end">
-              <button
-                onClick={() => setShowQRGenerator(false)}
-                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-colors"
+            {/* URL Display */}
+            <div className="text-sm text-gray-500 mt-2 mb-4">
+              <p className="truncate max-w-xs mx-auto">
+                {menu.menuUrl || "QR code loading..."}
+              </p>
+            </div>
+            
+            {/* Action Buttons */}
+            <div className="flex justify-center space-x-3">
+              <a
+                href={menu.qrCodeUrl}
+                download={`menu-${menu.name.replace(/\s+/g, '-').toLowerCase()}.png`}
+                className="flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
               >
-                Close
+                Download QR
+              </a>
+              <button 
+                onClick={() => {
+                  if (menu.menuUrl) {
+                    navigator.clipboard.writeText(menu.menuUrl);
+                    setSuccessMessage("URL copied to clipboard!");
+                  }
+                }}
+                className="flex items-center justify-center px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors"
+              >
+                Copy URL
+              </button>
+              <button 
+                onClick={() => {
+                  if (menu.menuUrl && navigator.share) {
+                    navigator.share({
+                      title: `${menu.restaurant} - ${menu.name}`,
+                      text: `Check out our AR menu!`,
+                      url: menu.menuUrl
+                    });
+                  } else if (menu.menuUrl) {
+                    navigator.clipboard.writeText(menu.menuUrl);
+                    setSuccessMessage("URL copied to clipboard!");
+                  }
+                }}
+                className="flex items-center justify-center px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors"
+              >
+                Share
               </button>
             </div>
           </div>
+          
+          {/* Instructions */}
+          <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 w-full">
+            <h3 className="font-medium text-blue-800 mb-2">How to use your QR code:</h3>
+            <ul className="text-sm text-blue-700 space-y-2">
+              <li className="flex items-start">
+                <span className="mr-2">1.</span>
+                <span>Download and print the QR code to display in your restaurant</span>
+              </li>
+              <li className="flex items-start">
+                <span className="mr-2">2.</span>
+                <span>Customers can scan the code with their phone camera</span>
+              </li>
+              <li className="flex items-start">
+                <span className="mr-2">3.</span>
+                <span>They'll see your menu with interactive AR models of your dishes</span>
+              </li>
+            </ul>
+          </div>
         </div>
-      )}
+      </div>
       
+      {/* Footer */}
+      <div className="bg-gray-50 px-6 py-4 flex justify-end">
+        <button
+          onClick={() => setShowQRGenerator(false)}
+          className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-colors"
+        >
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+)}
       {/* Styles for some animations */}
       <style jsx global>{`
         @keyframes spin {
