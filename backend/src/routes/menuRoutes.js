@@ -1,7 +1,9 @@
+// backend/src/routes/menuRoutes.js
 const express = require("express");
 const router = express.Router();
 const Menu = require('../../models/Menu');
 const Element = require("../../models/Element");
+const mongoose = require("mongoose"); // Added mongoose import
 const { protect } = require("../middleware/authMiddleware");
 const jwt = require("jsonwebtoken");
 const { createQR } = require("../utils/qrGenerator");
@@ -90,6 +92,7 @@ router.get("/qr/:id", verifyToken, async (req, res) => {
     res.status(500).json({ error: "Failed to generate QR code" });
   }
 });
+
 // Update an existing menu
 router.put("/:id", verifyToken, async (req, res) => {
   try {
