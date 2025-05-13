@@ -1,7 +1,6 @@
-// frontend/pages/menu/[id].jsx
+// pages/menu/[id].jsx - Enhanced version matching the editor preview
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
-import Link from "next/link";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
@@ -18,6 +17,7 @@ export default function MenuView() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedItemModel, setSelectedItemModel] = useState(null);
+  const BACKEND_URL = "http://localhost:5000";
 
   useEffect(() => {
     if (!id) return;
@@ -30,15 +30,17 @@ export default function MenuView() {
         setLoading(true);
         
         // Connect directly to the backend
-        const backendUrl = "http://localhost:5000";
-        const response = await axios.get(`${backendUrl}/api/menus/public/${id}`);
-        
+        const response = await axios.get(`${BACKEND_URL}/api/menus/public/${id}`);
         console.log("Menu data received:", response.data);
         
-        setMenu(response.data);
-        setSelectedCategory(response.data.categories && response.data.categories.length > 0 
-          ? response.data.categories[0] 
-          : null);
+        const menuData = response.data;
+        setMenu(menuData);
+        
+        // Set the first category as selected if available
+        if (menuData.categories && menuData.categories.length > 0) {
+          setSelectedCategory(menuData.categories[0]);
+        }
+        
       } catch (error) {
         console.error("Error processing menu data:", error);
         setError(error.message || "Failed to load menu");
@@ -52,10 +54,40 @@ export default function MenuView() {
 
   useEffect(() => {
     if (modelURL) {
+      console.log("Loading 3D model from URL:", modelURL);
       const loader = new GLTFLoader();
-      loader.load(modelURL, (gltf) => {
-        setModel(gltf.scene);
-      });
+      loader.load(
+        modelURL,
+        (gltf) => {
+          console.log("Model loaded successfully");
+          // Process the loaded model
+          const loadedModel = gltf.scene;
+          
+          // Center and scale the model appropriately
+          const box = new THREE.Box3().setFromObject(loadedModel);
+          const center = box.getCenter(new THREE.Vector3());
+          const size = box.getSize(new THREE.Vector3());
+          
+          const maxDim = Math.max(size.x, size.y, size.z);
+          const scale = 1 / maxDim;
+          
+          loadedModel.position.x = -center.x * scale;
+          loadedModel.position.y = -center.y * scale;
+          loadedModel.position.z = -center.z * scale;
+          loadedModel.scale.multiplyScalar(scale);
+          
+          setModel(loadedModel);
+        },
+        // Progress callback
+        (xhr) => {
+          console.log((xhr.loaded / xhr.total) * 100 + '% loaded');
+        },
+        // Error callback
+        (error) => {
+          console.error('Error loading model:', error);
+          alert('Failed to load 3D model. See console for details.');
+        }
+      );
     }
   }, [modelURL]);
 
@@ -67,20 +99,26 @@ export default function MenuView() {
       try {
         console.log("Loading model ID:", item.value);
         
-        // Fetch the model information directly from the backend
-        const backendUrl = "http://localhost:5000";
-        const response = await axios.get(`${backendUrl}/api/uploads/${item.value}`);
-        
-        console.log("Model data:", response.data);
-        setSelectedItemModel(response.data);
-        setModelURL(response.data.url || response.data.fileUrl);
+        // Attempt to get the model directly from uploaded models
+        try {
+          // Fetch the model information directly from the backend
+          const response = await axios.get(`${BACKEND_URL}/api/uploads/${item.value}`);
+          console.log("Model data:", response.data);
+          setSelectedItemModel(response.data);
+          setModelURL(response.data.url || response.data.fileUrl);
+        } catch (modelError) {
+          console.error("Error fetching model from uploads:", modelError);
+          
+          // If that fails, try loading it directly (assuming value might be a URL)
+          console.log("Attempting to load model directly from:", item.value);
+          setModelURL(item.value);
+        }
       } catch (error) {
         console.error("Error fetching model:", error);
       }
     } else {
-      setModelURL(null);
-      setModel(null);
-      setSelectedItemModel(null);
+      // For non-model buttons, don't clear the model - let the button handler handle it
+      console.log("Non-model button clicked:", item);
     }
   };
 
@@ -91,7 +129,6 @@ export default function MenuView() {
         <div 
           key={index}
           className="menu-item text-item"
-          onClick={() => handleItemClick(item)}
           style={{
             fontSize: item.style?.fontSize || "16px",
             color: item.style?.color || menu.theme?.textColor || "#333",
@@ -101,13 +138,17 @@ export default function MenuView() {
             padding: "15px",
             borderRadius: "10px",
             marginBottom: "15px",
-            cursor: "pointer",
             transition: "transform 0.3s ease, box-shadow 0.3s ease",
           }}
         >
           <div className="item-content">
-            <h3 style={{ fontSize: "1.2rem", marginBottom: "10px" }}>{item.name}</h3>
-            <div>{item.content}</div>
+            {/* Only show the content, not the duplicate name/heading */}
+            <div style={{
+              fontSize: item.style?.fontSize || "16px",
+              fontWeight: item.style?.fontWeight || "normal"
+            }}>
+              {item.content}
+            </div>
           </div>
         </div>
       );
@@ -122,7 +163,18 @@ export default function MenuView() {
           }}
         >
           <button 
-            onClick={() => handleItemClick(item)}
+            onClick={() => {
+              // If button has a model value, fetch and show the 3D model
+              if (item.buttonType === 'model' && item.value) {
+                handleItemClick(item);
+              } else if (item.buttonType === 'url' && item.value) {
+                // Open URL in new tab if it's a URL button
+                window.open(item.value, '_blank');
+              } else {
+                // For demonstration, just alert when a non-model button is clicked
+                alert(`Button clicked: ${item.label || item.name}`);
+              }
+            }}
             style={{
               backgroundColor: item.style?.backgroundColor || menu.theme?.primaryColor || "#0070f3",
               color: item.style?.textColor || "#FFFFFF",
@@ -134,19 +186,7 @@ export default function MenuView() {
               transition: "transform 0.3s ease, box-shadow 0.3s ease",
             }}
           >
-            {item.label || "View"}
-            {item.buttonType === 'model' && (
-              <span style={{ 
-                marginLeft: "8px", 
-                backgroundColor: "#ff4500", 
-                color: "white",
-                padding: "2px 6px",
-                borderRadius: "4px",
-                fontSize: "0.7rem"
-              }}>
-                AR
-              </span>
-            )}
+            {item.label || item.name || "View"}
           </button>
         </div>
       );
@@ -155,11 +195,9 @@ export default function MenuView() {
         <div 
           key={index}
           className="menu-item image-item"
-          onClick={() => handleItemClick(item)}
           style={{
             textAlign: "center",
             marginBottom: "15px",
-            cursor: "pointer",
             transition: "transform 0.3s ease, box-shadow 0.3s ease",
           }}
         >
@@ -225,13 +263,11 @@ export default function MenuView() {
         <div
           key={index}
           className="menu-item"
-          onClick={() => handleItemClick(item)}
           style={{
             border: "1px solid #eee",
             borderRadius: "10px",
             padding: "15px",
             marginBottom: "15px",
-            cursor: "pointer",
             transition: "transform 0.3s ease, box-shadow 0.3s ease",
           }}
         >
@@ -322,6 +358,7 @@ export default function MenuView() {
   
   if (!menu) return <div className="p-8 text-center">Menu not found</div>;
 
+  // EXACTLY match the preview design from the menu editor
   return (
     <div className="menu-container" style={{
       backgroundColor: menu.theme?.secondaryColor || "#f5f5f5",
@@ -347,11 +384,12 @@ export default function MenuView() {
       )}
       
       <div style={{ position: 'relative', zIndex: 1, maxWidth: "1200px", margin: "0 auto", padding: "20px" }}>
+        {/* Header - Exactly match the preview */}
         <header style={{ 
           textAlign: "center", 
           marginBottom: "30px",
           padding: "20px",
-          backgroundColor: menu.theme?.backgroundImage ? 'rgba(0,0,0,0.7)' : 'transparent',
+          backgroundColor: 'transparent',
           borderRadius: '10px'
         }}>
           <h1 style={{ 
@@ -363,156 +401,95 @@ export default function MenuView() {
           </h1>
           <h2 style={{ 
             fontSize: "1.5rem",
-            color: menu.theme?.backgroundImage ? 'white' : (menu.theme?.textColor || "#666")
+            color: menu.theme?.textColor || "#666"
           }}>
             {menu.name}
           </h2>
         </header>
         
-        {/* Category tabs */}
-        {menu.categories && menu.categories.length > 0 && (
-          <div style={{
-            display: "flex",
-            flexWrap: "wrap",
-            gap: "10px",
-            marginBottom: "30px",
-            justifyContent: "center",
-          }}>
-            {menu.categories.map(category => (
-              <button 
-                key={category}
-                onClick={() => setSelectedCategory(category)}
-                style={{
-                  padding: "8px 16px",
-                  background: category === selectedCategory 
-                    ? (menu.theme?.primaryColor || "#0070f3") 
-                    : "#f5f5f5",
-                  color: category === selectedCategory ? "white" : "#333",
-                  border: "none",
-                  borderRadius: "20px",
-                  cursor: "pointer",
-                  fontSize: "1rem",
-                  transition: "all 0.3s ease",
-                }}
-              >
-                {category}
-              </button>
-            ))}
-          </div>
-        )}
-        
-        {/* Main content grid */}
+        {/* Main content area */}
         <div style={{
-          display: "grid",
-          gridTemplateColumns: model ? "1fr 1fr" : "1fr",
-          gap: "30px",
+          backgroundColor: 'white',
+          borderRadius: "12px",
+          padding: "20px",
+          boxShadow: "0 2px 10px rgba(0,0,0,0.1)"
         }}>
-          {/* Menu items section */}
-          <div style={{ 
-            backgroundColor: menu.theme?.backgroundImage ? 'rgba(255,255,255,0.9)' : 'white',
-            borderRadius: "12px",
-            padding: "20px",
-            boxShadow: "0 2px 10px rgba(0,0,0,0.1)"
-          }}>
-            {/* Item list */}
-            {menu.items && menu.items.length > 0 ? (
-              menu.items
-                .filter(item => !selectedCategory || item.category === selectedCategory)
-                .map((item, index) => renderMenuItem(item, index))
-            ) : (
-              <div style={{
-                textAlign: "center",
-                padding: "30px",
-                color: "#666",
-              }}>
-                No menu items available
-              </div>
-            )}
-          </div>
-          
-          {/* 3D Model Viewer (only shown when a model is selected) */}
-          {model && (
+          {/* Item list */}
+          {menu.items && menu.items.length > 0 ? (
+            menu.items.map((item, index) => renderMenuItem(item, index))
+          ) : (
             <div style={{
-              backgroundColor: 'white',
-              borderRadius: "12px",
-              padding: "20px",
-              boxShadow: "0 2px 10px rgba(0,0,0,0.1)",
-              height: "fit-content",
-              position: "sticky",
-              top: "20px",
+              textAlign: "center",
+              padding: "30px",
+              color: "#666",
             }}>
-              <h3 style={{ 
-                marginBottom: "15px", 
-                color: menu.theme?.primaryColor || "#0070f3",
-                fontSize: "1.3rem",
-                fontWeight: "bold",
-              }}>
-                3D Preview: {selectedItem?.name || "Model"}
-              </h3>
-              
-              <div style={{
-                height: "300px",
-                borderRadius: "8px",
-                overflow: "hidden",
-                background: "#f5f5f5",
-                marginBottom: "15px",
-              }}>
-                <Canvas camera={{ position: [0, 1, 3] }}>
-                  <ambientLight intensity={1} />
-                  <directionalLight position={[1, 1, 1]} intensity={1} />
-                  <OrbitControls />
-                  {model ? <primitive object={model} dispose={null} /> : <p>Loading Model...</p>}
-                </Canvas>
-              </div>
-              
-              <button 
-                onClick={() => {
-                  const modelId = selectedItemModel?._id || selectedItem?.value;
-                  if (modelId) {
-                    window.open(`/ar-view/${modelId}`, '_blank');
-                  }
-                }}
-                style={{
-                  width: "100%",
-                  padding: "12px",
-                  backgroundColor: "#ff4500",
-                  color: "white",
-                  border: "none",
-                  borderRadius: "8px",
-                  cursor: "pointer",
-                  fontWeight: "bold",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <span style={{ marginRight: "8px" }}>View in AR</span>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M12 18h.01M8 21h8a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2Z" />
-                  <path d="M12 6v8" />
-                </svg>
-              </button>
-              
-              {selectedItemModel && (
-                <div style={{
-                  marginTop: "15px",
-                  padding: "10px",
-                  backgroundColor: "#f5f5f5",
-                  borderRadius: "8px",
-                  fontSize: "0.9rem",
-                }}>
-                  <p style={{ margin: "0 0 5px 0", fontWeight: "500" }}>Model Information:</p>
-                  <p style={{ margin: "0", color: "#666" }}>
-                    Name: {selectedItemModel.name || "Unnamed Model"}
-                  </p>
-                  <p style={{ margin: "5px 0 0 0", color: "#666" }}>
-                    Type: {selectedItemModel.type || "3D Model"}
-                  </p>
-                </div>
-              )}
+              No menu items available
             </div>
           )}
         </div>
+        
+        {/* Model viewer - only shown when a model is selected */}
+        {model && (
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: "12px", 
+            padding: "20px",
+            boxShadow: "0 2px 10px rgba(0,0,0,0.1)",
+            marginTop: "20px",
+          }}>
+            <h3 style={{ 
+              marginBottom: "15px", 
+              color: menu.theme?.primaryColor || "#0070f3",
+              fontSize: "1.3rem",
+              fontWeight: "bold", 
+            }}>
+              3D Preview: {selectedItem?.name || "Model"}
+            </h3>
+            
+            <div style={{
+              height: "300px",
+              borderRadius: "8px",
+              overflow: "hidden",
+              background: "#f5f5f5", 
+              marginBottom: "15px", 
+            }}>
+              <Canvas camera={{ position: [0, 1, 3] }}>
+                <ambientLight intensity={1} />
+                <directionalLight position={[1, 1, 1]} intensity={1} />
+                <OrbitControls />
+                {model ? <primitive object={model} dispose={null} /> : <p>Loading Model...</p>}
+              </Canvas>
+            </div>
+            
+            <button 
+              onClick={() => {
+                const modelId = selectedItemModel?._id || selectedItem?.value;
+                if (modelId) {
+                  window.open(`/ar-view/${modelId}`, '_blank');
+                }
+              }}
+              style={{
+                width: "100%",
+                padding: "12px",
+                backgroundColor: "#ff4500",
+                color: "white",
+                border: "none",
+                borderRadius: "8px",
+                cursor: "pointer",
+                fontWeight: "bold",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <span style={{ marginRight: "8px" }}>View in AR</span>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 18h.01M8 21h8a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2Z" />
+                <path d="M12 6v8" />
+              </svg>
+            </button>
+          </div>
+        )}
       </div>
 
       <style jsx>{`
