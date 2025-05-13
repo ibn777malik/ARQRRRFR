@@ -97,7 +97,9 @@ export default function MenuView() {
             color: item.style?.color || menu.theme?.textColor || "#333",
             fontWeight: item.style?.fontWeight || "normal",
             textAlign: item.style?.textAlign || "left",
-            backgroundColor: item.style?.backgroundColor || "transparent",
+            backgroundColor: item.style?.backgroundColor !== "transparent" 
+              ? item.style?.backgroundColor 
+              : "transparent",
             padding: "15px",
             borderRadius: "10px",
             marginBottom: "15px",
@@ -106,12 +108,21 @@ export default function MenuView() {
           }}
         >
           <div className="item-content">
-            <h3 style={{ fontSize: "1.2rem", marginBottom: "10px" }}>{item.name}</h3>
+            <h3 style={{ 
+              fontSize: "1.2rem", 
+              marginBottom: "10px",
+              color: menu.theme?.textColor || "#333" 
+            }}>
+              {item.name}
+            </h3>
             <div>{item.content}</div>
           </div>
         </div>
       );
     } else if (item.type === 'button') {
+      // Special handling for AR model buttons
+      const isARModel = item.buttonType === 'model';
+      
       return (
         <div 
           key={index}
@@ -119,35 +130,65 @@ export default function MenuView() {
           style={{
             textAlign: "center",
             marginBottom: "15px",
+            backgroundColor: "#fff",
+            padding: "15px",
+            borderRadius: "10px",
+            border: "1px solid #eee",
           }}
         >
-          <button 
-            onClick={() => handleItemClick(item)}
-            style={{
-              backgroundColor: item.style?.backgroundColor || menu.theme?.primaryColor || "#0070f3",
-              color: item.style?.textColor || "#FFFFFF",
-              borderRadius: item.style?.borderRadius || "4px",
-              padding: "10px 20px",
-              border: "none",
-              cursor: "pointer",
-              fontWeight: "500",
-              transition: "transform 0.3s ease, box-shadow 0.3s ease",
-            }}
-          >
-            {item.label || "View"}
-            {item.buttonType === 'model' && (
-              <span style={{ 
-                marginLeft: "8px", 
-                backgroundColor: "#ff4500", 
-                color: "white",
-                padding: "2px 6px",
-                borderRadius: "4px",
-                fontSize: "0.7rem"
-              }}>
-                AR
-              </span>
-            )}
-          </button>
+          {/* Item name */}
+          <h3 style={{ 
+            fontSize: "1.2rem", 
+            marginBottom: "10px",
+            color: menu.theme?.textColor || "#333" 
+          }}>
+            {item.name}
+          </h3>
+          
+          {/* Only show button type for AR model buttons */}
+          {isARModel && (
+            <div style={{ 
+              fontSize: "0.9rem", 
+              color: "#666",
+              marginBottom: "8px",
+              display: "inline-block",
+              backgroundColor: "#f0f0f0",
+              padding: "2px 8px",
+              borderRadius: "4px"
+            }}>
+              Button Type: AR Model
+            </div>
+          )}
+          
+          <div style={{ marginTop: "12px" }}>
+            <button 
+              onClick={() => handleItemClick(item)}
+              style={{
+                backgroundColor: item.style?.backgroundColor || menu.theme?.primaryColor || "#0070f3",
+                color: item.style?.textColor || "#FFFFFF",
+                borderRadius: item.style?.borderRadius || "4px",
+                padding: "10px 20px",
+                border: "none",
+                cursor: "pointer",
+                fontWeight: "500",
+                transition: "transform 0.3s ease, box-shadow 0.3s ease",
+              }}
+            >
+              {item.label || "View"}
+              {isARModel && (
+                <span style={{ 
+                  marginLeft: "8px", 
+                  backgroundColor: "#ff4500", 
+                  color: "white",
+                  padding: "2px 6px",
+                  borderRadius: "4px",
+                  fontSize: "0.7rem"
+                }}>
+                  AR
+                </span>
+              )}
+            </button>
+          </div>
         </div>
       );
     } else if (item.type === 'image' && item.src) {
@@ -161,6 +202,9 @@ export default function MenuView() {
             marginBottom: "15px",
             cursor: "pointer",
             transition: "transform 0.3s ease, box-shadow 0.3s ease",
+            backgroundColor: "#fff",
+            padding: "15px",
+            borderRadius: "10px",
           }}
         >
           <img 
@@ -193,6 +237,9 @@ export default function MenuView() {
           style={{
             textAlign: "center",
             marginBottom: "15px",
+            backgroundColor: "#fff",
+            padding: "15px",
+            borderRadius: "10px",
           }}
         >
           <video 
@@ -233,6 +280,7 @@ export default function MenuView() {
             marginBottom: "15px",
             cursor: "pointer",
             transition: "transform 0.3s ease, box-shadow 0.3s ease",
+            backgroundColor: "#fff",
           }}
         >
           <h3 style={{ 
