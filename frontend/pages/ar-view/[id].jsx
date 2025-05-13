@@ -1,8 +1,9 @@
+// frontend/pages/ar-view/[id].jsx
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import dynamic from "next/dynamic";
 import { Canvas } from "@react-three/fiber";
-import { OrbitControls } from "@react-three/drei";
+import { OrbitControls, Environment } from "@react-three/drei";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
 
@@ -25,13 +26,19 @@ export default function ARViewer() {
   const [loading, setLoading] = useState(true);
   const [model, setModel] = useState(null);
   const [arSupported, setARSupported] = useState(false);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     // Check if AR is supported
-    if (navigator.xr) {
-      navigator.xr.isSessionSupported('immersive-ar').then(supported => {
-        setARSupported(supported);
-      });
+    if (typeof navigator !== 'undefined' && navigator.xr) {
+      navigator.xr.isSessionSupported('immersive-ar')
+        .then(supported => {
+          setARSupported(supported);
+        })
+        .catch(err => {
+          console.log("Error checking AR support:", err);
+          setARSupported(false);
+        });
     }
   }, []);
 
@@ -42,8 +49,14 @@ export default function ARViewer() {
       try {
         // Fetch model information
         const modelResponse = await fetch(`/api/public/model/${id}`);
-        if (!modelResponse.ok) throw new Error('Failed to fetch model');
+        
+        if (!modelResponse.ok) {
+          throw new Error(`Failed to load model: ${modelResponse.status}`);
+        }
+        
         const modelData = await modelResponse.json();
+        console.log("Model data:", modelData);
+        
         setModelURL(modelData.fileUrl);
         
         // Try to fetch the related menu item if available
@@ -60,6 +73,7 @@ export default function ARViewer() {
         setLoading(false);
       } catch (error) {
         console.error("Error fetching data:", error);
+        setError(error.message || "Failed to load model");
         setLoading(false);
       }
     };
@@ -88,7 +102,7 @@ export default function ARViewer() {
           
           setModel(gltf.scene);
           
-          // Log the interaction
+          // Log the interaction - could be connected to your analytics
           logInteraction('ar_view');
         },
         (xhr) => {
@@ -96,66 +110,153 @@ export default function ARViewer() {
         },
         (error) => {
           console.error('Error loading model:', error);
+          setError("Failed to load 3D model. Please try again.");
         }
       );
     }
   }, [modelURL, id]);
 
   const logInteraction = (interactionType) => {
-    if (!id) return;
-    
-    fetch('/api/analytics/interactions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        modelId: id,
-        menuItemId: menuItem?._id,
-        interactionType,
-      }),
-    }).catch(err => console.error("Failed to log interaction:", err));
+    // This would connect to your analytics backend
+    console.log(`Logged interaction: ${interactionType} for model ${id}`);
+    // You could implement a real API call here
   };
 
   if (loading) {
     return (
-      <div style={styles.loadingContainer}>
-        <div style={styles.loadingSpinner}></div>
+      <div className="loading-container">
+        <div className="loading-spinner"></div>
         <p>Loading AR experience...</p>
+        
+        <style jsx>{`
+          .loading-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            width: 100%;
+            background-color: #1a1a2e;
+            color: white;
+          }
+          .loading-spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid rgba(255, 255, 255, 0.2);
+            border-top: 4px solid white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+          }
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        `}</style>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="error-container">
+        <h2>Error Loading Model</h2>
+        <p>{error}</p>
+        <button onClick={() => router.back()}>
+          Go Back
+        </button>
+        
+        <style jsx>{`
+          .error-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            padding: 20px;
+            text-align: center;
+            background-color: #1a1a2e;
+            color: white;
+          }
+          h2 {
+            margin-bottom: 20px;
+            color: #ff4500;
+          }
+          p {
+            margin-bottom: 30px;
+          }
+          button {
+            padding: 10px 20px;
+            background-color: #0070f3;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: 500;
+          }
+        `}</style>
       </div>
     );
   }
 
   if (!modelURL) {
     return (
-      <div style={styles.errorContainer}>
+      <div className="error-container">
         <h2>Model Not Found</h2>
         <p>The requested 3D model could not be found.</p>
-        <button 
-          onClick={() => router.back()} 
-          style={styles.backButton}
-        >
+        <button onClick={() => router.back()}>
           Go Back
         </button>
+        
+        <style jsx>{`
+          .error-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            padding: 20px;
+            text-align: center;
+            background-color: #1a1a2e;
+            color: white;
+          }
+          h2 {
+            margin-bottom: 20px;
+          }
+          p {
+            margin-bottom: 30px;
+          }
+          button {
+            padding: 10px 20px;
+            background-color: #0070f3;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: 500;
+          }
+        `}</style>
       </div>
     );
   }
 
   return (
-    <div style={styles.container}>
+    <div className="ar-container">
       {/* Menu item info overlay */}
       {menuItem && (
-        <div style={styles.menuItemOverlay}>
+        <div className="menu-item-overlay">
           <h3>{menuItem.name}</h3>
-          <p>{menuItem.description}</p>
-          <p style={styles.price}>${menuItem.price?.toFixed(2)}</p>
+          {menuItem.description && <p className="description">{menuItem.description}</p>}
+          {menuItem.price && (
+            <p className="price">${menuItem.price.toFixed(2)}</p>
+          )}
         </div>
       )}
       
       {/* AR Experience */}
-      <div style={styles.canvasContainer}>
+      <div className="canvas-container">
         {arSupported && (
-          <div style={styles.arButtonContainer}>
+          <div className="ar-button-container">
             <ARButton />
           </div>
         )}
@@ -173,6 +274,7 @@ export default function ARViewer() {
               <ambientLight intensity={0.8} />
               <spotLight position={[10, 10, 10]} angle={0.15} penumbra={1} />
               <pointLight position={[-10, -10, -10]} />
+              <Environment preset="apartment" />
               <OrbitControls />
               {model && <primitive object={model} />}
             </>
@@ -181,97 +283,91 @@ export default function ARViewer() {
       </div>
       
       {/* Navigation controls */}
-      <div style={styles.controls}>
+      <div className="controls">
         <button
           onClick={() => router.back()}
-          style={styles.backButton}
+          className="back-button"
         >
           Back to Menu
         </button>
       </div>
+      
+      <style jsx>{`
+        .ar-container {
+          position: relative;
+          width: 100vw;
+          height: 100vh;
+          overflow: hidden;
+          background-color: #1a1a2e;
+        }
+        
+        .menu-item-overlay {
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          padding: 15px;
+          background: rgba(0,0,0,0.7);
+          color: white;
+          z-index: 10;
+          text-align: center;
+        }
+        
+        .menu-item-overlay h3 {
+          margin: 0 0 5px 0;
+          font-size: 20px;
+        }
+        
+        .description {
+          margin: 5px 0;
+          font-size: 14px;
+          opacity: 0.8;
+        }
+        
+        .price {
+          margin: 5px 0 0 0;
+          font-weight: bold;
+          color: #4caf50;
+          font-size: 18px;
+        }
+        
+        .canvas-container {
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+        }
+        
+        .ar-button-container {
+          position: absolute;
+          bottom: 80px;
+          left: 50%;
+          transform: translateX(-50%);
+          z-index: 100;
+        }
+        
+        .controls {
+          position: absolute;
+          bottom: 20px;
+          left: 0;
+          right: 0;
+          display: flex;
+          justify-content: center;
+          z-index: 100;
+        }
+        
+        .back-button {
+          padding: 12px 24px;
+          background-color: #0070f3;
+          color: white;
+          border: none;
+          border-radius: 5px;
+          font-size: 16px;
+          font-weight: bold;
+          cursor: pointer;
+        }
+      `}</style>
     </div>
   );
 }
-
-const styles = {
-  container: {
-    position: "relative",
-    width: "100vw",
-    height: "100vh",
-    overflow: "hidden",
-    backgroundColor: "#f7f7f7"
-  },
-  loadingContainer: {
-    display: "flex",
-    flexDirection: "column",
-    justifyContent: "center",
-    alignItems: "center",
-    height: "100vh",
-    width: "100vw"
-  },
-  loadingSpinner: {
-    width: "40px",
-    height: "40px",
-    border: "4px solid #f3f3f3",
-    borderTop: "4px solid #0070f3",
-    borderRadius: "50%",
-    animation: "spin 1s linear infinite"
-  },
-  errorContainer: {
-    display: "flex",
-    flexDirection: "column",
-    justifyContent: "center",
-    alignItems: "center",
-    height: "100vh",
-    padding: "20px",
-    textAlign: "center"
-  },
-  menuItemOverlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    padding: "15px",
-    background: "rgba(0,0,0,0.7)",
-    color: "white",
-    zIndex: 10,
-    textAlign: "center"
-  },
-  price: {
-    fontWeight: "bold",
-    color: "#4caf50"
-  },
-  canvasContainer: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    width: "100%",
-    height: "100%"
-  },
-  arButtonContainer: {
-    position: "absolute",
-    bottom: "80px",
-    left: "50%",
-    transform: "translateX(-50%)",
-    zIndex: 100
-  },
-  controls: {
-    position: "absolute",
-    bottom: "20px",
-    left: 0,
-    right: 0,
-    display: "flex",
-    justifyContent: "center",
-    zIndex: 100
-  },
-  backButton: {
-    padding: "12px 24px",
-    backgroundColor: "#0070f3",
-    color: "white",
-    border: "none",
-    borderRadius: "5px",
-    fontSize: "16px",
-    fontWeight: "bold",
-    cursor: "pointer"
-  }
-};

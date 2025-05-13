@@ -1,7 +1,6 @@
 // frontend/pages/menu/[id].jsx
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
-import Link from "next/link";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
@@ -18,27 +17,39 @@ export default function MenuView() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedItemModel, setSelectedItemModel] = useState(null);
+  const [backgroundImage, setBackgroundImage] = useState(null);
 
   useEffect(() => {
     if (!id) return;
     
     console.log("Menu ID from URL:", id);
     
-    // Fetch menu data directly from the backend
+    // Fetch menu data
     const fetchMenu = async () => {
       try {
         setLoading(true);
         
-        // Connect directly to the backend
-        const backendUrl = "http://localhost:5000";
-        const response = await axios.get(`${backendUrl}/api/menus/public/${id}`);
+        // Use the frontend API route that connects to backend
+        const response = await fetch(`/api/public/menu/${id}`);
         
-        console.log("Menu data received:", response.data);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch menu: ${response.status}`);
+        }
         
-        setMenu(response.data);
-        setSelectedCategory(response.data.categories && response.data.categories.length > 0 
-          ? response.data.categories[0] 
-          : null);
+        const data = await response.json();
+        console.log("Menu data received:", data);
+        
+        setMenu(data);
+        
+        // Set the background image if available
+        if (data.theme?.backgroundImage) {
+          setBackgroundImage(data.theme.backgroundImage);
+        }
+        
+        // Set initial category if categories exist
+        if (data.categories && data.categories.length > 0) {
+          setSelectedCategory(data.categories[0]);
+        }
       } catch (error) {
         console.error("Error processing menu data:", error);
         setError(error.message || "Failed to load menu");
@@ -53,9 +64,16 @@ export default function MenuView() {
   useEffect(() => {
     if (modelURL) {
       const loader = new GLTFLoader();
-      loader.load(modelURL, (gltf) => {
-        setModel(gltf.scene);
-      });
+      loader.load(
+        modelURL, 
+        (gltf) => {
+          setModel(gltf.scene);
+        },
+        undefined,
+        (error) => {
+          console.error("Error loading model:", error);
+        }
+      );
     }
   }, [modelURL]);
 
@@ -67,13 +85,18 @@ export default function MenuView() {
       try {
         console.log("Loading model ID:", item.value);
         
-        // Fetch the model information directly from the backend
-        const backendUrl = "http://localhost:5000";
-        const response = await axios.get(`${backendUrl}/api/uploads/${item.value}`);
+        // Fetch the model information using the frontend API route
+        const response = await fetch(`/api/public/model/${item.value}`);
         
-        console.log("Model data:", response.data);
-        setSelectedItemModel(response.data);
-        setModelURL(response.data.url || response.data.fileUrl);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch model: ${response.status}`);
+        }
+        
+        const modelData = await response.json();
+        console.log("Model data:", modelData);
+        
+        setSelectedItemModel(modelData);
+        setModelURL(modelData.fileUrl);
       } catch (error) {
         console.error("Error fetching model:", error);
       }
@@ -85,101 +108,58 @@ export default function MenuView() {
   };
 
   // Function to render a menu item based on its type
-  const renderMenuItem = (item, index) => {
-    if (item.type === 'text') {
-      return (
-        <div 
-          key={index}
-          className="menu-item text-item"
-          onClick={() => handleItemClick(item)}
-          style={{
-            fontSize: item.style?.fontSize || "16px",
-            color: item.style?.color || menu.theme?.textColor || "#333",
-            fontWeight: item.style?.fontWeight || "normal",
-            textAlign: item.style?.textAlign || "left",
-            backgroundColor: item.style?.backgroundColor !== "transparent" 
-              ? item.style?.backgroundColor 
-              : "transparent",
-            padding: "15px",
-            borderRadius: "10px",
-            marginBottom: "15px",
-            cursor: "pointer",
-            transition: "transform 0.3s ease, box-shadow 0.3s ease",
-          }}
-        >
-          <div className="item-content">
-            <h3 style={{ 
-              fontSize: "1.2rem", 
-              marginBottom: "10px",
-              color: menu.theme?.textColor || "#333" 
-            }}>
-              {item.name}
-            </h3>
-            <div>{item.content}</div>
+  const renderMenuItem = (item) => {
+    switch (item.type) {
+      case 'text':
+        return (
+          <div 
+            className="text-item"
+            onClick={() => handleItemClick(item)}
+            style={{
+              fontSize: item.style?.fontSize || "16px",
+              color: item.style?.color || menu.theme?.textColor || "#333333",
+              fontWeight: item.style?.fontWeight || "normal",
+              textAlign: item.style?.textAlign || "left",
+              backgroundColor: item.style?.backgroundColor === 'transparent' 
+                ? 'transparent' 
+                : (item.style?.backgroundColor || 'transparent'),
+              padding: "15px",
+              borderRadius: "8px",
+              marginBottom: "15px",
+              cursor: "pointer",
+              transition: "transform 0.3s ease, box-shadow 0.3s ease",
+            }}
+          >
+            {item.content || "Text content"}
           </div>
-        </div>
-      );
-    } else if (item.type === 'button') {
-      // Special handling for AR model buttons
-      const isARModel = item.buttonType === 'model';
+        );
       
-      return (
-        <div 
-          key={index}
-          className="menu-item button-item"
-          style={{
-            textAlign: "center",
-            marginBottom: "15px",
-            backgroundColor: "#fff",
-            padding: "15px",
-            borderRadius: "10px",
-            border: "1px solid #eee",
-          }}
-        >
-          {/* Item name */}
-          <h3 style={{ 
-            fontSize: "1.2rem", 
-            marginBottom: "10px",
-            color: menu.theme?.textColor || "#333" 
-          }}>
-            {item.name}
-          </h3>
-          
-          {/* Only show button type for AR model buttons */}
-          {isARModel && (
-            <div style={{ 
-              fontSize: "0.9rem", 
-              color: "#666",
-              marginBottom: "8px",
-              display: "inline-block",
-              backgroundColor: "#f0f0f0",
-              padding: "2px 8px",
-              borderRadius: "4px"
-            }}>
-              Button Type: AR Model
-            </div>
-          )}
-          
-          <div style={{ marginTop: "12px" }}>
-            <button 
+      case 'button':
+        return (
+          <div 
+            className="button-item"
+            style={{
+              textAlign: "center",
+              marginBottom: "15px",
+            }}
+          >
+            <button
               onClick={() => handleItemClick(item)}
               style={{
                 backgroundColor: item.style?.backgroundColor || menu.theme?.primaryColor || "#0070f3",
                 color: item.style?.textColor || "#FFFFFF",
                 borderRadius: item.style?.borderRadius || "4px",
-                padding: "10px 20px",
+                padding: "8px 16px",
                 border: "none",
                 cursor: "pointer",
-                fontWeight: "500",
-                transition: "transform 0.3s ease, box-shadow 0.3s ease",
+                transition: "transform 0.2s ease, box-shadow 0.2s ease",
               }}
             >
-              {item.label || "View"}
-              {isARModel && (
+              {item.label || "Button"}
+              {item.buttonType === 'model' && (
                 <span style={{ 
                   marginLeft: "8px", 
-                  backgroundColor: "#ff4500", 
-                  color: "white",
+                  backgroundColor: "rgba(255,255,255,0.3)", 
                   padding: "2px 6px",
                   borderRadius: "4px",
                   fontSize: "0.7rem"
@@ -189,139 +169,94 @@ export default function MenuView() {
               )}
             </button>
           </div>
-        </div>
-      );
-    } else if (item.type === 'image' && item.src) {
-      return (
-        <div 
-          key={index}
-          className="menu-item image-item"
-          onClick={() => handleItemClick(item)}
-          style={{
-            textAlign: "center",
-            marginBottom: "15px",
-            cursor: "pointer",
-            transition: "transform 0.3s ease, box-shadow 0.3s ease",
-            backgroundColor: "#fff",
-            padding: "15px",
-            borderRadius: "10px",
-          }}
-        >
-          <img 
-            src={item.src} 
-            alt={item.alt || item.name || "Menu image"} 
+        );
+      
+      case 'image':
+        if (!item.src) return null;
+        return (
+          <div 
+            className="image-item"
             style={{
-              maxWidth: "100%",
-              width: `${item.width || 300}px`,
-              height: `${item.height || 'auto'}px`,
-              borderRadius: "8px",
-              margin: "0 auto",
+              textAlign: "center",
+              marginBottom: "15px",
             }}
-          />
-          {item.name && (
-            <h3 style={{ 
-              marginTop: "10px", 
-              fontSize: "1.2rem",
-              color: menu.theme?.textColor || "#333"
-            }}>
-              {item.name}
-            </h3>
-          )}
-        </div>
-      );
-    } else if (item.type === 'video' && item.src) {
-      return (
-        <div 
-          key={index}
-          className="menu-item video-item"
-          style={{
-            textAlign: "center",
-            marginBottom: "15px",
-            backgroundColor: "#fff",
-            padding: "15px",
-            borderRadius: "10px",
-          }}
-        >
-          <video 
-            src={item.src}
-            controls={item.controls !== false}
-            autoPlay={item.autoplay || false}
-            muted={item.autoplay || false}
-            style={{
-              maxWidth: "100%",
-              width: `${item.width || 300}px`,
-              height: `${item.height || 'auto'}px`,
-              borderRadius: "8px",
-              margin: "0 auto",
-            }}
-          />
-          {item.name && (
-            <h3 style={{ 
-              marginTop: "10px", 
-              fontSize: "1.2rem",
-              color: menu.theme?.textColor || "#333"
-            }}>
-              {item.name}
-            </h3>
-          )}
-        </div>
-      );
-    } else {
-      // Default item rendering for other types or missing data
-      return (
-        <div
-          key={index}
-          className="menu-item"
-          onClick={() => handleItemClick(item)}
-          style={{
-            border: "1px solid #eee",
-            borderRadius: "10px",
-            padding: "15px",
-            marginBottom: "15px",
-            cursor: "pointer",
-            transition: "transform 0.3s ease, box-shadow 0.3s ease",
-            backgroundColor: "#fff",
-          }}
-        >
-          <h3 style={{ 
-            marginBottom: "5px", 
-            fontSize: "1.2rem",
-            color: menu.theme?.textColor || "#333"
-          }}>
-            {item.name || "Untitled Item"}
-          </h3>
-          <div style={{ color: "#666" }}>
-            {item.description || item.content || "No description available"}
+          >
+            <img 
+              src={item.src} 
+              alt={item.alt || item.name || "Menu image"} 
+              style={{
+                width: `${item.width || 300}px`,
+                height: `${item.height || 'auto'}px`,
+                maxWidth: "100%",
+                objectFit: "contain",
+                margin: "0 auto",
+                borderRadius: "4px",
+              }}
+              onClick={() => {
+                if (item.clickBehavior === 'enlarge') {
+                  // Handle image enlargement logic
+                  console.log("Enlarge image");
+                } else if (item.clickBehavior === 'link' && item.linkUrl) {
+                  window.open(item.linkUrl, '_blank');
+                }
+              }}
+            />
           </div>
-        </div>
-      );
+        );
+      
+      case 'video':
+        if (!item.src) return null;
+        return (
+          <div 
+            className="video-item"
+            style={{
+              textAlign: "center",
+              marginBottom: "15px",
+            }}
+          >
+            <video 
+              src={item.src}
+              controls={item.controls !== false}
+              autoPlay={item.autoplay || false}
+              muted={item.autoplay || false}
+              style={{
+                width: `${item.width || 300}px`,
+                height: `${item.height || 'auto'}px`,
+                maxWidth: "100%",
+                margin: "0 auto",
+                borderRadius: "4px",
+              }}
+            />
+          </div>
+        );
+      
+      default:
+        return null;
     }
   };
 
   if (loading) return (
-    <div className="loading-container">
-      <div className="loading-spinner"></div>
+    <div style={{ 
+      display: "flex", 
+      flexDirection: "column",
+      alignItems: "center", 
+      justifyContent: "center", 
+      height: "100vh", 
+      width: "100%", 
+      backgroundColor: "#f5f5f5"
+    }}>
+      <div style={{
+        width: "50px",
+        height: "50px",
+        border: "4px solid #f3f3f3",
+        borderTop: "4px solid #0070f3",
+        borderRadius: "50%",
+        animation: "spin 1s linear infinite",
+        marginBottom: "20px"
+      }}></div>
       <p>Loading menu...</p>
       
       <style jsx>{`
-        .loading-container {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          min-height: 300px;
-          padding: 50px;
-          text-align: center;
-        }
-        .loading-spinner {
-          width: 40px;
-          height: 40px;
-          border: 4px solid #f3f3f3;
-          border-top: 4px solid #0070f3;
-          border-radius: 50%;
-          animation: spin 1s linear infinite;
-          margin-bottom: 20px;
-        }
         @keyframes spin {
           0% { transform: rotate(0deg); }
           100% { transform: rotate(360deg); }
@@ -331,102 +266,101 @@ export default function MenuView() {
   );
   
   if (error) return (
-    <div className="error-container">
-      <h2>Error Loading Menu</h2>
-      <p>{error}</p>
-      <button onClick={() => router.push("/dashboard")}>
-        Return to Dashboard
+    <div style={{
+      maxWidth: "600px",
+      margin: "50px auto",
+      padding: "30px",
+      textAlign: "center",
+      backgroundColor: "#fff5f5",
+      borderRadius: "8px",
+      boxShadow: "0 4px 15px rgba(0,0,0,0.1)"
+    }}>
+      <h2 style={{ color: "#e53e3e", marginBottom: "15px" }}>Error Loading Menu</h2>
+      <p style={{ marginBottom: "20px" }}>{error}</p>
+      <button 
+        onClick={() => router.back()}
+        style={{
+          background: "#0070f3",
+          color: "white",
+          border: "none",
+          padding: "10px 20px",
+          borderRadius: "5px",
+          cursor: "pointer",
+          fontWeight: "500"
+        }}
+      >
+        Go Back
       </button>
-      
-      <style jsx>{`
-        .error-container {
-          max-width: 600px;
-          margin: 50px auto;
-          padding: 30px;
-          text-align: center;
-          background: #fff5f5;
-          border-radius: 8px;
-          border-left: 4px solid #f56565;
-        }
-        h2 {
-          color: #e53e3e;
-          margin-bottom: 15px;
-        }
-        p {
-          margin-bottom: 20px;
-        }
-        button {
-          background: #0070f3;
-          color: white;
-          border: none;
-          padding: 10px 20px;
-          border-radius: 5px;
-          cursor: pointer;
-          font-weight: 500;
-        }
-      `}</style>
     </div>
   );
   
-  if (!menu) return <div className="p-8 text-center">Menu not found</div>;
+  if (!menu) return null;
 
   return (
-    <div className="menu-container" style={{
+    <div style={{
       backgroundColor: menu.theme?.secondaryColor || "#f5f5f5",
       color: menu.theme?.textColor || "#333333",
       fontFamily: menu.theme?.fontFamily || "Arial, sans-serif",
-      backgroundImage: menu.theme?.backgroundImage ? `url(${menu.theme.backgroundImage})` : 'none',
+      backgroundImage: backgroundImage ? `url(${backgroundImage})` : 'none',
       backgroundSize: 'cover',
       backgroundPosition: 'center',
       minHeight: '100vh',
       position: 'relative',
     }}>
-      {/* Overlay if background image exists */}
-      {menu.theme?.backgroundImage && (
+      {/* Overlay for background image */}
+      {backgroundImage && (
         <div style={{
           position: 'absolute',
           top: 0,
           left: 0,
           right: 0,
           bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.5)',
+          backgroundColor: 'rgba(0,0,0,0.6)',
           zIndex: 0,
         }} />
       )}
       
-      <div style={{ position: 'relative', zIndex: 1, maxWidth: "1200px", margin: "0 auto", padding: "20px" }}>
-        <header style={{ 
-          textAlign: "center", 
-          marginBottom: "30px",
-          padding: "20px",
-          backgroundColor: menu.theme?.backgroundImage ? 'rgba(0,0,0,0.7)' : 'transparent',
-          borderRadius: '10px'
+      {/* Main Content */}
+      <div style={{ 
+        position: 'relative', 
+        zIndex: 1, 
+        maxWidth: "1200px", 
+        margin: "0 auto", 
+        padding: "20px" 
+      }}>
+        {/* Header */}
+        <div style={{ 
+          padding: "30px 20px", 
+          textAlign: "center",
+          marginBottom: "30px"
         }}>
           <h1 style={{ 
             fontSize: "2.5rem", 
+            fontWeight: "bold",
+            color: menu.theme?.primaryColor || "#0070f3",
             marginBottom: "10px",
-            color: menu.theme?.primaryColor || "#0070f3"
           }}>
             {menu.restaurant}
           </h1>
           <h2 style={{ 
             fontSize: "1.5rem",
-            color: menu.theme?.backgroundImage ? 'white' : (menu.theme?.textColor || "#666")
+            opacity: 0.9,
+            color: backgroundImage ? '#ffffff' : (menu.theme?.textColor || "#333333"),
           }}>
             {menu.name}
           </h2>
-        </header>
+        </div>
         
-        {/* Category tabs */}
+        {/* Category Navigation */}
         {menu.categories && menu.categories.length > 0 && (
           <div style={{
             display: "flex",
             flexWrap: "wrap",
+            justifyContent: "center",
             gap: "10px",
             marginBottom: "30px",
-            justifyContent: "center",
           }}>
-            {menu.categories.map(category => (
+            {menu.categories.map((category) => (
               <button 
                 key={category}
                 onClick={() => setSelectedCategory(category)}
@@ -434,13 +368,15 @@ export default function MenuView() {
                   padding: "8px 16px",
                   background: category === selectedCategory 
                     ? (menu.theme?.primaryColor || "#0070f3") 
-                    : "#f5f5f5",
-                  color: category === selectedCategory ? "white" : "#333",
+                    : "rgba(255,255,255,0.9)",
+                  color: category === selectedCategory 
+                    ? "#ffffff" 
+                    : (menu.theme?.textColor || "#333333"),
                   border: "none",
                   borderRadius: "20px",
                   cursor: "pointer",
-                  fontSize: "1rem",
-                  transition: "all 0.3s ease",
+                  fontWeight: category === selectedCategory ? "500" : "normal",
+                  transition: "all 0.2s ease",
                 }}
               >
                 {category}
@@ -449,67 +385,80 @@ export default function MenuView() {
           </div>
         )}
         
-        {/* Main content grid */}
+        {/* Content Grid */}
         <div style={{
           display: "grid",
           gridTemplateColumns: model ? "1fr 1fr" : "1fr",
           gap: "30px",
         }}>
-          {/* Menu items section */}
+          {/* Menu Items */}
           <div style={{ 
-            backgroundColor: menu.theme?.backgroundImage ? 'rgba(255,255,255,0.9)' : 'white',
-            borderRadius: "12px",
+            backgroundColor: 'rgba(255,255,255,0.9)',
             padding: "20px",
-            boxShadow: "0 2px 10px rgba(0,0,0,0.1)"
+            borderRadius: "12px",
+            boxShadow: "0 4px 15px rgba(0,0,0,0.1)"
           }}>
-            {/* Item list */}
+            {/* Filter items by category if a category is selected */}
             {menu.items && menu.items.length > 0 ? (
-              menu.items
-                .filter(item => !selectedCategory || item.category === selectedCategory)
-                .map((item, index) => renderMenuItem(item, index))
+              <div>
+                {menu.items
+                  .filter(item => !selectedCategory || item.category === selectedCategory)
+                  .map((item, index) => (
+                    <div key={index}>
+                      {item.name && item.type !== 'button' && (
+                        <h3 style={{ 
+                          marginBottom: "10px", 
+                          color: menu.theme?.primaryColor || "#0070f3",
+                          fontWeight: "600",
+                          fontSize: "1.2rem",
+                          borderBottom: `2px solid ${menu.theme?.primaryColor || "#0070f3"}`,
+                          paddingBottom: "5px",
+                        }}>
+                          {item.name}
+                        </h3>
+                      )}
+                      {renderMenuItem(item)}
+                    </div>
+                  ))}
+              </div>
             ) : (
-              <div style={{
-                textAlign: "center",
-                padding: "30px",
-                color: "#666",
-              }}>
-                No menu items available
+              <div style={{ textAlign: "center", padding: "30px" }}>
+                <p>No items found in this menu.</p>
               </div>
             )}
           </div>
           
-          {/* 3D Model Viewer (only shown when a model is selected) */}
+          {/* 3D Model Viewer */}
           {model && (
             <div style={{
               backgroundColor: 'white',
-              borderRadius: "12px",
               padding: "20px",
-              boxShadow: "0 2px 10px rgba(0,0,0,0.1)",
-              height: "fit-content",
+              borderRadius: "12px",
+              boxShadow: "0 4px 15px rgba(0,0,0,0.1)",
               position: "sticky",
               top: "20px",
+              alignSelf: "start",
             }}>
               <h3 style={{ 
                 marginBottom: "15px", 
                 color: menu.theme?.primaryColor || "#0070f3",
-                fontSize: "1.3rem",
-                fontWeight: "bold",
+                fontWeight: "600",
               }}>
-                3D Preview: {selectedItem?.name || "Model"}
+                3D View: {selectedItem?.name || "Item"}
               </h3>
               
               <div style={{
                 height: "300px",
+                backgroundColor: "#f5f5f5",
                 borderRadius: "8px",
                 overflow: "hidden",
-                background: "#f5f5f5",
                 marginBottom: "15px",
               }}>
                 <Canvas camera={{ position: [0, 1, 3] }}>
                   <ambientLight intensity={1} />
                   <directionalLight position={[1, 1, 1]} intensity={1} />
                   <OrbitControls />
-                  {model ? <primitive object={model} dispose={null} /> : <p>Loading Model...</p>}
+                  {model && <primitive object={model} dispose={null} />}
                 </Canvas>
               </div>
               
@@ -528,7 +477,7 @@ export default function MenuView() {
                   border: "none",
                   borderRadius: "8px",
                   cursor: "pointer",
-                  fontWeight: "bold",
+                  fontWeight: "600",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
@@ -540,36 +489,30 @@ export default function MenuView() {
                   <path d="M12 6v8" />
                 </svg>
               </button>
-              
-              {selectedItemModel && (
-                <div style={{
-                  marginTop: "15px",
-                  padding: "10px",
-                  backgroundColor: "#f5f5f5",
-                  borderRadius: "8px",
-                  fontSize: "0.9rem",
-                }}>
-                  <p style={{ margin: "0 0 5px 0", fontWeight: "500" }}>Model Information:</p>
-                  <p style={{ margin: "0", color: "#666" }}>
-                    Name: {selectedItemModel.name || "Unnamed Model"}
-                  </p>
-                  <p style={{ margin: "5px 0 0 0", color: "#666" }}>
-                    Type: {selectedItemModel.type || "3D Model"}
-                  </p>
-                </div>
-              )}
             </div>
           )}
         </div>
       </div>
-
-      <style jsx>{`
+      
+      {/* Styles */}
+      <style jsx global>{`
+        * {
+          box-sizing: border-box;
+          margin: 0;
+          padding: 0;
+        }
+        
+        html, body {
+          height: 100%;
+          width: 100%;
+        }
+        
         @keyframes spin {
           0% { transform: rotate(0deg); }
           100% { transform: rotate(360deg); }
         }
         
-        .menu-item:hover {
+        .text-item:hover, .button-item:hover, .image-item:hover {
           transform: translateY(-5px);
           box-shadow: 0 5px 15px rgba(0,0,0,0.1);
         }

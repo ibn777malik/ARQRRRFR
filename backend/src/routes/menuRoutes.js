@@ -202,5 +202,55 @@ router.delete("/:id", verifyToken, async (req, res) => {
     res.status(500).json({ error: "Failed to delete menu" });
   }
 });
-
+// Get menu item by model ID (public endpoint)
+router.get("/public/menu-item-by-model/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Ensure the ID is in a valid format
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ error: "Invalid model ID format" });
+    }
+    
+    // Find all menus
+    const menus = await Menu.find();
+    
+    // Search through all menus for items that reference this model
+    let matchingItem = null;
+    let parentMenu = null;
+    
+    for (const menu of menus) {
+      if (!menu.items || !Array.isArray(menu.items)) continue;
+      
+      // Find a button item that references this model
+      const item = menu.items.find(item => 
+        item.type === 'button' && 
+        item.buttonType === 'model' && 
+        item.value === id
+      );
+      
+      if (item) {
+        matchingItem = item;
+        parentMenu = menu;
+        break;
+      }
+    }
+    
+    if (!matchingItem) {
+      return res.status(404).json({ error: "No menu item found referencing this model" });
+    }
+    
+    // Return the item with additional menu context
+    res.json({
+      ...matchingItem,
+      menuId: parentMenu._id,
+      menuName: parentMenu.name,
+      restaurantName: parentMenu.restaurant
+    });
+    
+  } catch (error) {
+    console.error("Error fetching menu item by model:", error);
+    res.status(500).json({ error: "Failed to fetch menu item" });
+  }
+});
 module.exports = router;
