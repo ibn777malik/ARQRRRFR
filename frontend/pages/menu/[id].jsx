@@ -152,7 +152,7 @@ export default function MenuView() {
           </div>
         </div>
       );
-    } else if (item.type === 'button') {
+    } else   if (item.type === 'button') {
       return (
         <div 
           key={index}
@@ -164,15 +164,24 @@ export default function MenuView() {
         >
           <button 
             onClick={() => {
-              // If button has a model value, fetch and show the 3D model
+              // Check if it's a model button
               if (item.buttonType === 'model' && item.value) {
-                handleItemClick(item);
+                // If the value contains a file path/name, extract it
+                const modelId = item.value;
+                if (modelId.includes(".glb")) {
+                  // For direct file paths (e.g., uploads/1739437174196.glb)
+                  const fileName = modelId.split('/').pop();
+                  router.push(`/view/${fileName}`);
+                } else {
+                  // For model IDs, assuming they're object IDs
+                  router.push(`/view/${modelId}`);
+                }
               } else if (item.buttonType === 'url' && item.value) {
                 // Open URL in new tab if it's a URL button
                 window.open(item.value, '_blank');
               } else {
                 // For demonstration, just alert when a non-model button is clicked
-                alert(`Button clicked: ${item.label || item.name}`);
+                handleItemClick(item);
               }
             }}
             style={{
