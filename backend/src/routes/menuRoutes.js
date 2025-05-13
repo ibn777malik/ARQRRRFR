@@ -1,9 +1,9 @@
-// backend/src/routes/menuRoutes.js
+// backend/src/routes/menuRoutes.js - Revert to working version
+
 const express = require("express");
 const router = express.Router();
 const Menu = require('../../models/Menu');
-const Element = require("../../models/Element");
-const mongoose = require("mongoose"); // Added mongoose import
+const mongoose = require("mongoose");
 const { protect } = require("../middleware/authMiddleware");
 const jwt = require("jsonwebtoken");
 const { createQR } = require("../utils/qrGenerator");
@@ -174,19 +174,6 @@ router.get("/public/:id", async (req, res) => {
   }
 });
 
-// Get model info (public endpoint)
-router.get("/public/model/:id", async (req, res) => {
-  try {
-    const element = await Element.findById(req.params.id);
-    if (!element) return res.status(404).json({ error: "Model not found" });
-    
-    res.json(element);
-  } catch (error) {
-    console.error("Error fetching model:", error);
-    res.status(500).json({ error: "Failed to fetch model" });
-  }
-});
-
 // Delete a menu
 router.delete("/:id", verifyToken, async (req, res) => {
   try {
@@ -202,55 +189,5 @@ router.delete("/:id", verifyToken, async (req, res) => {
     res.status(500).json({ error: "Failed to delete menu" });
   }
 });
-// Get menu item by model ID (public endpoint)
-router.get("/public/menu-item-by-model/:id", async (req, res) => {
-  try {
-    const { id } = req.params;
-    
-    // Ensure the ID is in a valid format
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ error: "Invalid model ID format" });
-    }
-    
-    // Find all menus
-    const menus = await Menu.find();
-    
-    // Search through all menus for items that reference this model
-    let matchingItem = null;
-    let parentMenu = null;
-    
-    for (const menu of menus) {
-      if (!menu.items || !Array.isArray(menu.items)) continue;
-      
-      // Find a button item that references this model
-      const item = menu.items.find(item => 
-        item.type === 'button' && 
-        item.buttonType === 'model' && 
-        item.value === id
-      );
-      
-      if (item) {
-        matchingItem = item;
-        parentMenu = menu;
-        break;
-      }
-    }
-    
-    if (!matchingItem) {
-      return res.status(404).json({ error: "No menu item found referencing this model" });
-    }
-    
-    // Return the item with additional menu context
-    res.json({
-      ...matchingItem,
-      menuId: parentMenu._id,
-      menuName: parentMenu.name,
-      restaurantName: parentMenu.restaurant
-    });
-    
-  } catch (error) {
-    console.error("Error fetching menu item by model:", error);
-    res.status(500).json({ error: "Failed to fetch menu item" });
-  }
-});
+
 module.exports = router;
