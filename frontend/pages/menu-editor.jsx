@@ -158,22 +158,57 @@ export default function EnhancedMenuEditor() {
   };
   
   // Update menu item
-  const updateMenuItem = (index, field, value) => {
-    const updatedItems = [...menu.items];
+ const updateMenuItem = (index, field, value) => {
+  const updatedItems = [...menu.items];
+  
+  if (field.includes('.')) {
+    // Handle nested properties like 'style.color'
+    const [parentField, childField] = field.split('.');
+    updatedItems[index][parentField] = {
+      ...updatedItems[index][parentField],
+      [childField]: value
+    };
+  } else {
+    updatedItems[index][field] = value;
     
-    if (field.includes('.')) {
-      // Handle nested properties like 'style.color'
-      const [parentField, childField] = field.split('.');
-      updatedItems[index][parentField] = {
-        ...updatedItems[index][parentField],
-        [childField]: value
-      };
-    } else {
-      updatedItems[index][field] = value;
+    // Special handling for model selection
+    if (field === 'value' && updatedItems[index].buttonType === 'model') {
+      console.log(`Setting model value: "${value}" for menu item "${updatedItems[index].name}"`);
+      
+      // Store the GLB path or model ID
+      if (value) {
+        // Find the selected model to get more information
+        const selectedModel = models.find(model => model._id === value);
+        if (selectedModel) {
+          console.log("Selected model information:", selectedModel);
+          
+          // Store model file URL information if available
+          // This ensures we have file path information
+          if (selectedModel.fileUrl) {
+            // Extract the GLB filename if it's a path
+            const glbFilename = selectedModel.fileUrl.split('/').pop();
+            console.log("Extracted GLB filename:", glbFilename);
+            
+            // Store GLB filename if it's a valid GLB file
+            if (glbFilename && glbFilename.endsWith('.glb')) {
+              updatedItems[index].glbFile = glbFilename;
+              console.log("Stored GLB filename in menu item:", glbFilename);
+            }
+          }
+          
+          // Update button name if it's generic
+          if (!updatedItems[index].name || updatedItems[index].name === "New Button") {
+            updatedItems[index].name = selectedModel.name || "View 3D Model";
+          }
+        } else {
+          console.warn("Model not found in models list:", value);
+        }
+      }
     }
-    
-    setMenu({ ...menu, items: updatedItems });
-  };
+  }
+  
+  setMenu({ ...menu, items: updatedItems });
+};
   
   // Delete menu item
   const deleteMenuItem = (index) => {

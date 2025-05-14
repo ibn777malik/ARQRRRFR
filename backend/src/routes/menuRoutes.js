@@ -189,5 +189,53 @@ router.delete("/:id", verifyToken, async (req, res) => {
     res.status(500).json({ error: "Failed to delete menu" });
   }
 });
-
+// Get menu item and parent menu by model ID
+router.get("/public/menu-item-by-model/:modelId", async (req, res) => {
+  try {
+    const { modelId } = req.params;
+    console.log(`Searching for menu item referencing model: ${modelId}`);
+    
+    // Check for both value field and glbFile field
+    const menu = await Menu.findOne({
+      $or: [
+        { "items.buttonType": "model", "items.value": modelId },
+        { "items.buttonType": "model", "items.glbFile": modelId }
+      ]
+    });
+    
+    if (!menu) {
+      console.log(`No menu found with an item referencing model ID: ${modelId}`);
+      return res.status(404).json({ error: "No menu item found for this model" });
+    }
+    
+    // Find the specific item within the menu
+    let menuItem = menu.items.find(item => 
+      item.buttonType === "model" && item.value === modelId
+    );
+    
+    // If not found by value, try finding by glbFile
+    if (!menuItem) {
+      menuItem = menu.items.find(item =>
+        item.buttonType === "model" && item.glbFile === modelId
+      );
+    }
+    
+    if (!menuItem) {
+      console.log("Menu found but item not found (unexpected)");
+      return res.status(404).json({ error: "Menu item not found" });
+    }
+    
+    console.log(`Found menu item: ${menuItem.name} in menu: ${menu.name}`);
+    
+    // Return both the menu item and the menu ID
+    res.json({
+      item: menuItem,
+      menuId: menu._id
+    });
+    
+  } catch (error) {
+    console.error(`Error finding menu item for model ${req.params.modelId}:`, error);
+    res.status(500).json({ error: "Failed to retrieve menu item" });
+  }
+});
 module.exports = router;

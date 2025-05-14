@@ -153,52 +153,66 @@ export default function MenuView() {
         </div>
       );
     } else   if (item.type === 'button') {
-      return (
-        <div 
-          key={index}
-          className="menu-item button-item"
-          style={{
-            textAlign: "center",
-            marginBottom: "15px",
-          }}
-        >
-          <button 
-            onClick={() => {
-              // Check if it's a model button
-              if (item.buttonType === 'model' && item.value) {
-                // If the value contains a file path/name, extract it
-                const modelId = item.value;
-                if (modelId.includes(".glb")) {
-                  // For direct file paths (e.g., uploads/1739437174196.glb)
-                  const fileName = modelId.split('/').pop();
-                  router.push(`/view/${fileName}`);
-                } else {
-                  // For model IDs, assuming they're object IDs
-                  router.push(`/view/${modelId}`);
-                }
-              } else if (item.buttonType === 'url' && item.value) {
-                // Open URL in new tab if it's a URL button
-                window.open(item.value, '_blank');
+  return (
+    <div 
+      key={index}
+      className="menu-item button-item"
+      style={{
+        textAlign: "center",
+        marginBottom: "15px",
+      }}
+    >
+      <button 
+        onClick={() => {
+          // Check if it's a model button
+          if (item.buttonType === 'model' && item.value) {
+            console.log("Model button clicked with value:", item.value);
+            
+            // Check if value contains direct file reference (.glb extension)
+            if (typeof item.value === 'string') {
+              const value = item.value.trim();
+              
+              // If this is a direct file path (from old data structure)
+              if (value.endsWith('.glb')) {
+                console.log("Direct GLB file reference detected:", value);
+                router.push(`/view/${value}`);
+              } 
+              // If this is an object ID (from new data structure)
+              else if (value.length > 0) {
+                console.log("Model ID reference detected:", value);
+                // Navigate to our new AR viewer
+                router.push(`/ar-view/${value}`);
               } else {
-                // For demonstration, just alert when a non-model button is clicked
-                handleItemClick(item);
+                console.error("Empty value in model button");
+                alert("This button doesn't have a model attached");
               }
-            }}
-            style={{
-              backgroundColor: item.style?.backgroundColor || menu.theme?.primaryColor || "#0070f3",
-              color: item.style?.textColor || "#FFFFFF",
-              borderRadius: item.style?.borderRadius || "4px",
-              padding: "10px 20px",
-              border: "none",
-              cursor: "pointer",
-              fontWeight: "500",
-              transition: "transform 0.3s ease, box-shadow 0.3s ease",
-            }}
-          >
-            {item.label || item.name || "View"}
-          </button>
-        </div>
-      );
+            } else {
+              console.error("Invalid value type in model button:", typeof item.value);
+              alert("Invalid model reference");
+            }
+          } else if (item.buttonType === 'url' && item.value) {
+            // Open URL in new tab if it's a URL button
+            window.open(item.value, '_blank');
+          } else {
+            // Just handle the click normally
+            handleItemClick(item);
+          }
+        }}
+        style={{
+          backgroundColor: item.style?.backgroundColor || menu.theme?.primaryColor || "#0070f3",
+          color: item.style?.textColor || "#FFFFFF",
+          borderRadius: item.style?.borderRadius || "4px",
+          padding: "10px 20px",
+          border: "none",
+          cursor: "pointer",
+          fontWeight: "500",
+          transition: "transform 0.3s ease, box-shadow 0.3s ease",
+        }}
+      >
+        {item.label || item.name || "View"}
+      </button>
+    </div>
+  );
     } else if (item.type === 'image' && item.src) {
       return (
         <div 
