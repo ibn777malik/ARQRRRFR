@@ -195,4 +195,37 @@ router.get("/menu-qr/:id", verifyToken, async (req, res) => {
     res.status(500).json({ error: "Failed to generate QR code" });
   }
 });
+
+// Fetch a Single Element by ID
+router.get("/elements/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    console.log(`Fetching element with ID: ${id}`);
+
+    // Validate ObjectId
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      console.log(`Invalid ObjectId: ${id}`);
+      return res.status(400).json({ error: "Invalid model ID format" });
+    }
+
+    // Query the Element collection
+    const element = await Element.findById(id);
+    if (!element) {
+      console.log(`Element not found for ID: ${id}`);
+      return res.status(404).json({ error: "Model not found" });
+    }
+
+    console.log(`Found element: ${element.name}`);
+    res.status(200).json({
+      _id: element._id,
+      name: element.name,
+      fileUrl: element.fileUrl,
+      type: element.type,
+      createdAt: element.createdAt,
+    });
+  } catch (error) {
+    console.error(`Error fetching element ${req.params.id}:`, error);
+    res.status(500).json({ error: "Failed to fetch model", message: error.message });
+  }
+});
 module.exports = router;

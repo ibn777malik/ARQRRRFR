@@ -19,7 +19,7 @@ export default function ARViewer() {
   const [menuItem, setMenuItem] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const BACKEND_URL = "http://localhost:5000";
+  const [modelData, setModelData] = useState(null);
 
   // Load model and optional menu information
   useEffect(() => {
@@ -29,52 +29,45 @@ export default function ARViewer() {
       setLoading(true);
       
       try {
-        // First, determine if we need to load a direct file or get information from the server
         let modelFileUrl;
         
-        // Check if this is a direct GLB file or an object ID
         if (id.endsWith('.glb')) {
-          // Direct GLB file path
           modelFileUrl = `/uploads/${id}`;
           console.log("Loading model directly from:", modelFileUrl);
         } else {
-          // Try to get model information from the server
+          console.log("Fetching model data for ID:", id);
           try {
-            const response = await axios.get(`${BACKEND_URL}/api/uploads/${id}`);
+            const response = await axios.get(`/api/model/${id}`);
+            
             if (response.data) {
               console.log("Model data retrieved:", response.data);
+              setModelData(response.data);
               modelFileUrl = response.data.fileUrl || response.data.url;
               
               if (!modelFileUrl) {
-                // If no URL found in the response, try to use the ID directly as a fallback
-                modelFileUrl = `/uploads/${id}`;
-                console.log("No URL found in response, using ID directly:", modelFileUrl);
-              } else {
-                console.log("Using model URL from response:", modelFileUrl);
+                throw new Error("No model URL found in response");
               }
+              console.log("Using model URL from response:", modelFileUrl);
             }
           } catch (error) {
             console.error("Error fetching model details:", error);
-            // Fallback to using the ID directly if server request fails
-            modelFileUrl = `/uploads/${id}`;
-            console.log("Error fetching from server, using ID directly:", modelFileUrl);
+            setError("Failed to load model details. Please check the URL or try again.");
+            setLoading(false);
+            return;
           }
         }
         
-        // If we have a menuId, try to get the menu item information
         if (menuId) {
           try {
-            const menuItemResponse = await axios.get(`${BACKEND_URL}/api/menus/public/menu-item-by-model/${id}`);
+            const menuItemResponse = await axios.get(`/api/public/menu-item-by-model/${id}`);
             if (menuItemResponse.data && menuItemResponse.data.item) {
               setMenuItem(menuItemResponse.data.item);
             }
           } catch (menuErr) {
             console.log("No menu item found or error:", menuErr);
-            // Non-critical error, we can still show the model
           }
         }
         
-        // Finally, load the 3D model
         loadModel(modelFileUrl);
       } catch (err) {
         console.error("Error in data fetching:", err);
@@ -84,9 +77,8 @@ export default function ARViewer() {
     };
     
     fetchData();
-  }, [id, menuId, BACKEND_URL]);
+  }, [id, menuId]);
 
-  // Function to load the 3D model using GLTFLoader
   const loadModel = (modelUrl) => {
     console.log("Loading 3D model from URL:", modelUrl);
     const loader = new GLTFLoader();
@@ -95,11 +87,8 @@ export default function ARViewer() {
       modelUrl,
       (gltf) => {
         console.log("Model loaded successfully");
-        
-        // Process the model - center and scale it
         const loadedModel = gltf.scene;
         
-        // Remove any node with type or constructor name "P" (if needed)
         loadedModel.traverse((child) => {
           if (child.type === "P" || (child.constructor && child.constructor.name === "P")) {
             if (child.parent) {
@@ -108,7 +97,6 @@ export default function ARViewer() {
           }
         });
         
-        // Center and scale the model
         const box = new THREE.Box3().setFromObject(loadedModel);
         const center = box.getCenter(new THREE.Vector3());
         const size = box.getSize(new THREE.Vector3());
@@ -124,14 +112,11 @@ export default function ARViewer() {
         setModel(loadedModel);
         setLoading(false);
         
-        // Log the view interaction (if relevant)
-        console.log(`Logging AR view for model ${id}`);
+        logViewInteraction();
       },
-      // Progress callback
       (xhr) => {
         console.log((xhr.loaded / xhr.total) * 100 + '% loaded');
       },
-      // Error callback
       (error) => {
         console.error('Error loading model:', error);
         setError("Failed to load 3D model. The file may be corrupted or in an unsupported format.");
@@ -140,18 +125,27 @@ export default function ARViewer() {
     );
   };
 
-  // Handle back button click - return to menu or dashboard
-  const handleBackClick = () => {
-    if (menuId) {
-      // If accessed from a menu, go back to that menu
-      router.push(`/menu/${menuId}`);
-    } else {
-      // Otherwise go back to dashboard
-      router.push("/dashboard");
+  const logViewInteraction = async () => {
+    try {
+      if (!id) return;
+      
+      await axios.post('/api/analytics/interactions', {
+        modelId: id,
+        menuId: menuId || null,
+        interactionType: 'ar_view'
+      });
+      
+      console.log(`Logged AR view for model ${id}`);
+    } catch (error) {
+      console.error("Failed to log view interaction:", error);
     }
   };
 
-  // Loading state
+  // Handle back button click - navigate to previous page
+  const handleBackClick = () => {
+    router.back();
+  };
+
   if (loading) {
     return (
       <div style={{ 
@@ -184,7 +178,6 @@ export default function ARViewer() {
     );
   }
 
-  // Error state
   if (error) {
     return (
       <div style={{ 
@@ -212,7 +205,7 @@ export default function ARViewer() {
             fontWeight: 500
           }}
         >
-          Go Back
+          Back to Menu
         </button>
       </div>
     );
@@ -249,23 +242,20 @@ export default function ARViewer() {
             alignItems: "center"
           }}
         >
-          ← Back to {menuId ? "Menu" : "Dashboard"}
+          ← Back to Menu
         </button>
         
-        {/* Title section - show menu item info if available */}
         <div style={{ color: "white" }}>
           {menuItem ? (
             <span style={{ fontWeight: "bold" }}>{menuItem.name || "3D Model View"}</span>
           ) : (
-            <span>AR Model Viewer</span>
+            <span>{modelData?.name || "AR Model Viewer"}</span>
           )}
         </div>
         
-        {/* Spacer to balance the layout */}
         <div style={{ width: "100px" }}></div>
       </nav>
 
-      {/* 3D Model Viewer */}
       <div style={{ width: "100vw", height: "100vh", background: "#1a1a2e" }}>
         <Canvas
           camera={{ position: [0, 1, 3], fov: 50 }}
@@ -283,7 +273,6 @@ export default function ARViewer() {
           />
           {model && <primitive object={model} dispose={null} />}
           
-          {/* Add a simple platform beneath the model */}
           <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.5, 0]} receiveShadow>
             <planeGeometry args={[10, 10]} />
             <meshStandardMaterial color="#111" />
@@ -291,7 +280,6 @@ export default function ARViewer() {
         </Canvas>
       </div>
       
-      {/* Menu item info overlay if available */}
       {menuItem && (
         <div style={{
           position: "absolute",
