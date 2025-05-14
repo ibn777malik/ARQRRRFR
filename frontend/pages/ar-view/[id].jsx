@@ -1,176 +1,180 @@
-// Enhanced AR View page without XR dependency (temporary version)
-import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
+import { useEffect, useState } from "react";
 import { Canvas } from "@react-three/fiber";
-import { OrbitControls, Environment } from "@react-three/drei";
-import * as THREE from "three";
+import { OrbitControls } from "@react-three/drei";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
+import * as THREE from "three";
+import { extend } from "@react-three/fiber";
 import axios from "axios";
+
+// Define a dummy class for "P" as a subclass of THREE.Object3D
+class P extends THREE.Object3D {}
+// Register it so that R3F can instantiate nodes of type "P"
+extend({ P });
 
 export default function ARViewer() {
   const router = useRouter();
-  const { id } = router.query;
-  const [modelURL, setModelURL] = useState(null);
-  const [menuItem, setMenuItem] = useState(null);
-  const [menuId, setMenuId] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const { id, menuId } = router.query;
   const [model, setModel] = useState(null);
+  const [menuItem, setMenuItem] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const BACKEND_URL = "http://localhost:5000";
 
-  // Debug log
-  useEffect(() => {
-    if (id) {
-      console.log("AR View: Model ID parameter:", id);
-    }
-  }, [id]);
-
+  // Load model and optional menu information
   useEffect(() => {
     if (!id) return;
     
-    const fetchModelData = async () => {
+    const fetchData = async () => {
+      setLoading(true);
+      
       try {
-        setLoading(true);
-        
-        console.log("Fetching model data for ID:", id);
-        
-        // First, try to determine if this is a direct file path or an object ID
+        // First, determine if we need to load a direct file or get information from the server
         let modelFileUrl;
+        
+        // Check if this is a direct GLB file or an object ID
         if (id.endsWith('.glb')) {
-          // If it's a GLB file, construct the URL directly
+          // Direct GLB file path
           modelFileUrl = `/uploads/${id}`;
-          console.log("Direct GLB file detected, setting URL to:", modelFileUrl);
-          setModelURL(modelFileUrl);
+          console.log("Loading model directly from:", modelFileUrl);
         } else {
-          // Otherwise, treat as an object ID and fetch from backend
+          // Try to get model information from the server
           try {
-            console.log("Fetching model info from backend for ID:", id);
             const response = await axios.get(`${BACKEND_URL}/api/uploads/${id}`);
-            
             if (response.data) {
               console.log("Model data retrieved:", response.data);
-              
-              // Set the model URL from the response
               modelFileUrl = response.data.fileUrl || response.data.url;
-              if (modelFileUrl) {
-                setModelURL(modelFileUrl);
-                console.log("Setting model URL to:", modelFileUrl);
+              
+              if (!modelFileUrl) {
+                // If no URL found in the response, try to use the ID directly as a fallback
+                modelFileUrl = `/uploads/${id}`;
+                console.log("No URL found in response, using ID directly:", modelFileUrl);
               } else {
-                throw new Error("Model URL not found in response");
+                console.log("Using model URL from response:", modelFileUrl);
               }
-            } else {
-              throw new Error("No model data returned from server");
             }
-          } catch (modelError) {
-            console.error("Error fetching model:", modelError);
-            setError("Could not find the 3D model. Please check the model ID.");
-            setLoading(false);
-            return;
+          } catch (error) {
+            console.error("Error fetching model details:", error);
+            // Fallback to using the ID directly if server request fails
+            modelFileUrl = `/uploads/${id}`;
+            console.log("Error fetching from server, using ID directly:", modelFileUrl);
           }
         }
         
-        // Try to get the menu item if it exists
-        try {
-          console.log("Attempting to find menu item for model:", id);
-          const menuItemResponse = await axios.get(`/api/public/menu-item-by-model/${id}`);
-          if (menuItemResponse.data) {
-            console.log("Menu item data:", menuItemResponse.data);
-            setMenuItem(menuItemResponse.data.item);
-            setMenuId(menuItemResponse.data.menuId);
+        // If we have a menuId, try to get the menu item information
+        if (menuId) {
+          try {
+            const menuItemResponse = await axios.get(`${BACKEND_URL}/api/menus/public/menu-item-by-model/${id}`);
+            if (menuItemResponse.data && menuItemResponse.data.item) {
+              setMenuItem(menuItemResponse.data.item);
+            }
+          } catch (menuErr) {
+            console.log("No menu item found or error:", menuErr);
+            // Non-critical error, we can still show the model
           }
-        } catch (menuError) {
-          console.log("No menu item found for this model, or error:", menuError);
-          // Not a critical error - we can still show the model
         }
         
-        setLoading(false);
-      } catch (error) {
-        console.error("Error in fetchModelData:", error);
-        setError(error.message || "Failed to load model data");
+        // Finally, load the 3D model
+        loadModel(modelFileUrl);
+      } catch (err) {
+        console.error("Error in data fetching:", err);
+        setError("Failed to load the 3D model. Please check the URL or try again.");
         setLoading(false);
       }
     };
     
-    fetchModelData();
-  }, [id, BACKEND_URL]);
+    fetchData();
+  }, [id, menuId, BACKEND_URL]);
 
-  useEffect(() => {
-    if (modelURL) {
-      console.log("Loading 3D model from URL:", modelURL);
-      const loader = new GLTFLoader();
-      loader.load(
-        modelURL,
-        (gltf) => {
-          console.log("Model loaded successfully");
-          // Process the loaded model
-          const loadedModel = gltf.scene;
-          
-          // Center and scale the model appropriately
-          const box = new THREE.Box3().setFromObject(loadedModel);
-          const center = box.getCenter(new THREE.Vector3());
-          const size = box.getSize(new THREE.Vector3());
-          
-          const maxDim = Math.max(size.x, size.y, size.z);
-          const scale = 1 / maxDim;
-          
-          loadedModel.position.x = -center.x * scale;
-          loadedModel.position.y = -center.y * scale;
-          loadedModel.position.z = -center.z * scale;
-          loadedModel.scale.multiplyScalar(scale);
-          
-          setModel(loadedModel);
-          
-          // Log the interaction
-          console.log(`Logged interaction: ar_view for model ${id}`);
-        },
-        (xhr) => {
-          console.log((xhr.loaded / xhr.total) * 100 + '% loaded');
-        },
-        (error) => {
-          console.error('Error loading model:', error);
-          setError("Failed to load 3D model. Please try again.");
-        }
-      );
-    }
-  }, [modelURL, id]);
+  // Function to load the 3D model using GLTFLoader
+  const loadModel = (modelUrl) => {
+    console.log("Loading 3D model from URL:", modelUrl);
+    const loader = new GLTFLoader();
+    
+    loader.load(
+      modelUrl,
+      (gltf) => {
+        console.log("Model loaded successfully");
+        
+        // Process the model - center and scale it
+        const loadedModel = gltf.scene;
+        
+        // Remove any node with type or constructor name "P" (if needed)
+        loadedModel.traverse((child) => {
+          if (child.type === "P" || (child.constructor && child.constructor.name === "P")) {
+            if (child.parent) {
+              child.parent.remove(child);
+            }
+          }
+        });
+        
+        // Center and scale the model
+        const box = new THREE.Box3().setFromObject(loadedModel);
+        const center = box.getCenter(new THREE.Vector3());
+        const size = box.getSize(new THREE.Vector3());
+        
+        const maxDim = Math.max(size.x, size.y, size.z);
+        const scale = 1 / maxDim;
+        
+        loadedModel.position.x = -center.x * scale;
+        loadedModel.position.y = -center.y * scale;
+        loadedModel.position.z = -center.z * scale;
+        loadedModel.scale.multiplyScalar(scale);
+        
+        setModel(loadedModel);
+        setLoading(false);
+        
+        // Log the view interaction (if relevant)
+        console.log(`Logging AR view for model ${id}`);
+      },
+      // Progress callback
+      (xhr) => {
+        console.log((xhr.loaded / xhr.total) * 100 + '% loaded');
+      },
+      // Error callback
+      (error) => {
+        console.error('Error loading model:', error);
+        setError("Failed to load 3D model. The file may be corrupted or in an unsupported format.");
+        setLoading(false);
+      }
+    );
+  };
 
-  // Handle returning to menu or previous page
+  // Handle back button click - return to menu or dashboard
   const handleBackClick = () => {
     if (menuId) {
-      // If we know which menu this came from, go back to it
+      // If accessed from a menu, go back to that menu
       router.push(`/menu/${menuId}`);
     } else {
-      // Otherwise just go back to the previous page
-      router.back();
+      // Otherwise go back to dashboard
+      router.push("/dashboard");
     }
   };
 
+  // Loading state
   if (loading) {
     return (
-      <div className="loading-container">
-        <div className="loading-spinner"></div>
+      <div style={{ 
+        display: "flex", 
+        flexDirection: "column", 
+        alignItems: "center", 
+        justifyContent: "center",
+        height: "100vh",
+        background: "#1a1a2e",
+        color: "white"
+      }}>
+        <div style={{
+          width: "50px", 
+          height: "50px", 
+          border: "4px solid rgba(255, 255, 255, 0.2)",
+          borderTop: "4px solid white",
+          borderRadius: "50%",
+          animation: "spin 1s linear infinite",
+          marginBottom: "20px"
+        }}></div>
         <p>Loading AR experience...</p>
         
         <style jsx>{`
-          .loading-container {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
-            width: 100%;
-            background-color: #1a1a2e;
-            color: white;
-          }
-          .loading-spinner {
-            width: 50px;
-            height: 50px;
-            border: 4px solid rgba(255, 255, 255, 0.2);
-            border-top: 4px solid white;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin-bottom: 20px;
-          }
           @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
@@ -180,206 +184,132 @@ export default function ARViewer() {
     );
   }
 
+  // Error state
   if (error) {
     return (
-      <div className="error-container">
-        <h2>Error Loading Model</h2>
-        <p>{error}</p>
-        <button onClick={handleBackClick}>
+      <div style={{ 
+        display: "flex", 
+        flexDirection: "column", 
+        alignItems: "center", 
+        justifyContent: "center",
+        height: "100vh",
+        padding: "20px",
+        textAlign: "center",
+        background: "#1a1a2e",
+        color: "white"
+      }}>
+        <h2 style={{ marginBottom: "20px", color: "#ff4500" }}>Error Loading Model</h2>
+        <p style={{ marginBottom: "30px" }}>{error}</p>
+        <button
+          onClick={handleBackClick}
+          style={{
+            padding: "10px 20px",
+            backgroundColor: "#0070f3",
+            color: "white", 
+            border: "none",
+            borderRadius: "5px",
+            cursor: "pointer",
+            fontWeight: 500
+          }}
+        >
           Go Back
         </button>
-        
-        <style jsx>{`
-          .error-container {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
-            padding: 20px;
-            text-align: center;
-            background-color: #1a1a2e;
-            color: white;
-          }
-          h2 {
-            margin-bottom: 20px;
-            color: #ff4500;
-          }
-          p {
-            margin-bottom: 30px;
-          }
-          button {
-            padding: 10px 20px;
-            background-color: #0070f3;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-weight: 500;
-          }
-        `}</style>
-      </div>
-    );
-  }
-
-  if (!modelURL) {
-    return (
-      <div className="error-container">
-        <h2>Model Not Found</h2>
-        <p>The requested 3D model could not be found.</p>
-        <button onClick={handleBackClick}>
-          Go Back
-        </button>
-        
-        <style jsx>{`
-          .error-container {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
-            padding: 20px;
-            text-align: center;
-            background-color: #1a1a2e;
-            color: white;
-          }
-          h2 {
-            margin-bottom: 20px;
-          }
-          p {
-            margin-bottom: 30px;
-          }
-          button {
-            padding: 10px 20px;
-            background-color: #0070f3;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-weight: 500;
-          }
-        `}</style>
       </div>
     );
   }
 
   return (
-    <div className="ar-container">
-      {/* Menu item info overlay */}
-      {menuItem && (
-        <div className="menu-item-overlay">
-          <h3>{menuItem.name}</h3>
-          {menuItem.description && <p className="description">{menuItem.description}</p>}
-          {menuItem.price && (
-            <p className="price">${menuItem.price.toFixed(2)}</p>
+    <div style={{ width: "100vw", height: "100vh", position: "relative" }}>
+      {/* Navigation Bar */}
+      <nav
+        style={{
+          padding: "10px",
+          textAlign: "center",
+          background: "#1a1a2e",
+          borderBottom: "1px solid #2d2d42",
+          position: "fixed",
+          width: "100%",
+          top: 0,
+          zIndex: 10,
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center"
+        }}
+      >
+        <button
+          onClick={handleBackClick}
+          style={{
+            padding: "8px 16px",
+            backgroundColor: "#0070f3",
+            color: "#fff",
+            border: "none",
+            cursor: "pointer",
+            borderRadius: "5px",
+            display: "flex",
+            alignItems: "center"
+          }}
+        >
+          ← Back to {menuId ? "Menu" : "Dashboard"}
+        </button>
+        
+        {/* Title section - show menu item info if available */}
+        <div style={{ color: "white" }}>
+          {menuItem ? (
+            <span style={{ fontWeight: "bold" }}>{menuItem.name || "3D Model View"}</span>
+          ) : (
+            <span>AR Model Viewer</span>
           )}
         </div>
-      )}
-      
-      {/* 3D Viewer (non-AR version) */}
-      <div className="canvas-container">
-        <Canvas camera={{ position: [0, 0, 2], fov: 60 }}>
+        
+        {/* Spacer to balance the layout */}
+        <div style={{ width: "100px" }}></div>
+      </nav>
+
+      {/* 3D Model Viewer */}
+      <div style={{ width: "100vw", height: "100vh", background: "#1a1a2e" }}>
+        <Canvas
+          camera={{ position: [0, 1, 3], fov: 50 }}
+          style={{ background: "#1a1a2e" }}
+        >
           <ambientLight intensity={0.8} />
-          <spotLight position={[10, 10, 10]} angle={0.15} penumbra={1} />
-          <pointLight position={[-10, -10, -10]} />
-          <Environment preset="apartment" />
-          <OrbitControls />
-          {model && <primitive object={model} />}
+          <spotLight position={[5, 10, 5]} angle={0.15} penumbra={1} intensity={1} castShadow />
+          <directionalLight position={[1, 1, 1]} intensity={0.8} />
+          <OrbitControls 
+            enableDamping 
+            dampingFactor={0.05} 
+            rotateSpeed={0.5}
+            autoRotate={true}
+            autoRotateSpeed={0.5}
+          />
+          {model && <primitive object={model} dispose={null} />}
+          
+          {/* Add a simple platform beneath the model */}
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.5, 0]} receiveShadow>
+            <planeGeometry args={[10, 10]} />
+            <meshStandardMaterial color="#111" />
+          </mesh>
         </Canvas>
       </div>
       
-      {/* Navigation controls */}
-      <div className="controls">
-        <button
-          onClick={handleBackClick}
-          className="back-button"
-        >
-          Back to Menu
-        </button>
-        
-        <div className="ar-note">
-          <p>Note: Full AR experience requires installation of @react-three/xr package.</p>
+      {/* Menu item info overlay if available */}
+      {menuItem && (
+        <div style={{
+          position: "absolute",
+          bottom: "20px",
+          left: "20px",
+          right: "20px",
+          background: "rgba(0, 0, 0, 0.7)",
+          color: "white",
+          padding: "15px",
+          borderRadius: "10px",
+          zIndex: 100
+        }}>
+          <h2 style={{ fontSize: "22px", marginBottom: "5px" }}>{menuItem.name}</h2>
+          {menuItem.description && (
+            <p style={{ fontSize: "14px", opacity: 0.9, marginBottom: "10px" }}>{menuItem.description}</p>
+          )}
         </div>
-      </div>
-      
-      <style jsx>{`
-        .ar-container {
-          position: relative;
-          width: 100vw;
-          height: 100vh;
-          overflow: hidden;
-          background-color: #1a1a2e;
-        }
-        
-        .menu-item-overlay {
-          position: absolute;
-          top: 0;
-          left: 0;
-          right: 0;
-          padding: 15px;
-          background: rgba(0,0,0,0.7);
-          color: white;
-          z-index: 10;
-          text-align: center;
-        }
-        
-        .menu-item-overlay h3 {
-          margin: 0 0 5px 0;
-          font-size: 20px;
-        }
-        
-        .description {
-          margin: 5px 0;
-          font-size: 14px;
-          opacity: 0.8;
-        }
-        
-        .price {
-          margin: 5px 0 0 0;
-          font-weight: bold;
-          color: #4caf50;
-          font-size: 18px;
-        }
-        
-        .canvas-container {
-          position: absolute;
-          top: 0;
-          left: 0;
-          width: 100%;
-          height: 100%;
-        }
-        
-        .controls {
-          position: absolute;
-          bottom: 20px;
-          left: 0;
-          right: 0;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          z-index: 100;
-        }
-        
-        .back-button {
-          padding: 12px 24px;
-          background-color: #0070f3;
-          color: white;
-          border: none;
-          border-radius: 5px;
-          font-size: 16px;
-          font-weight: bold;
-          cursor: pointer;
-          margin-bottom: 15px;
-        }
-        
-        .ar-note {
-          background: rgba(0,0,0,0.5);
-          color: white;
-          padding: 8px 12px;
-          border-radius: 5px;
-          font-size: 12px;
-        }
-      `}</style>
+      )}
     </div>
   );
 }
